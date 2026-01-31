@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, BarChart3, Wallet, MoreHorizontal, Plus, LayoutDashboard, HeartHandshake, Coins, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { BookOpen, BarChart3, Wallet, MoreHorizontal, Plus, LayoutDashboard, HeartHandshake, Coins, LogIn, LogOut, User as UserIcon, Globe } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,16 +10,19 @@ interface LayoutProps {
   user: { name: string; email: string } | null;
   onAuthRequest: () => void;
   onLogout: () => void;
+  // Lang Props
+  lang: 'en' | 'id';
+  setLang: (lang: 'en' | 'id') => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAddPress, user, onAuthRequest, onLogout }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAddPress, user, onAuthRequest, onLogout, lang, setLang }) => {
   const navItems = [
-    { id: 'trans', label: 'Trans.', icon: BookOpen },
-    { id: 'stats', label: 'Stats', icon: BarChart3 },
-    { id: 'accounts', label: 'Accounts', icon: Wallet },
+    { id: 'trans', label: lang === 'en' ? 'Trans.' : 'Trans.', icon: BookOpen },
+    { id: 'stats', label: lang === 'en' ? 'Stats' : 'Statistik', icon: BarChart3 },
+    { id: 'accounts', label: lang === 'en' ? 'Accounts' : 'Akun', icon: Wallet },
     { id: 'non-profit', label: 'Hajj', icon: HeartHandshake },
     { id: 'zakat', label: 'Zakat', icon: Coins }, 
-    { id: 'more', label: 'More', icon: MoreHorizontal },
+    { id: 'more', label: lang === 'en' ? 'More' : 'Lainnya', icon: MoreHorizontal },
   ];
 
   return (
@@ -27,16 +30,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
       
       {/* Desktop/Tablet Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-surface border-r border-white/10 h-full shrink-0 transition-colors duration-300">
-        <div className="p-6 flex flex-col gap-6">
-           {/* Logo Section */}
-           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-               <LayoutDashboard className="w-5 h-5 text-white" />
-             </div>
-             <h1 className="font-bold text-lg tracking-tight">FinancePro</h1>
-           </div>
-
-           {/* User / Login Section (Moved Here) */}
+        <div className="p-6 flex flex-col gap-4">
+           {/* User / Login Section */}
            <div className="bg-white/5 rounded-xl p-3 border border-white/5">
               {user ? (
                 <div className="flex flex-col gap-3">
@@ -53,7 +48,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
                     onClick={onLogout}
                     className="w-full flex items-center justify-center gap-2 text-xs text-red-400 bg-red-500/10 hover:bg-red-500/20 py-2 rounded-lg transition-colors"
                    >
-                     <LogOut className="w-3 h-3" /> Log Out
+                     <LogOut className="w-3 h-3" /> {lang === 'en' ? 'Log Out' : 'Keluar'}
                    </button>
                 </div>
               ) : (
@@ -61,10 +56,26 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
                   onClick={onAuthRequest}
                   className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-3 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 transition-all"
                 >
-                  <LogIn className="w-4 h-4" /> Login / Sync
+                  <LogIn className="w-4 h-4" /> {lang === 'en' ? 'Login / Sync' : 'Masuk / Sinkron'}
                 </button>
               )}
            </div>
+
+           {/* Language Switcher (Placed below Login) */}
+           <button 
+             onClick={() => setLang(lang === 'en' ? 'id' : 'en')}
+             className="w-full flex items-center justify-between px-3 py-2 bg-transparent hover:bg-white/5 rounded-lg text-xs text-gray-400 hover:text-white transition-colors border border-white/5 hover:border-white/10"
+           >
+             <div className="flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5" />
+                <span>{lang === 'en' ? 'Language' : 'Bahasa'}</span>
+             </div>
+             <div className="flex items-center gap-1 bg-black/20 rounded px-1.5 py-0.5">
+                <span className={lang === 'en' ? 'text-primary font-bold' : 'text-gray-600'}>EN</span>
+                <span className="text-gray-700">/</span>
+                <span className={lang === 'id' ? 'text-primary font-bold' : 'text-gray-600'}>ID</span>
+             </div>
+           </button>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
@@ -83,6 +94,19 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
             </button>
           ))}
         </nav>
+
+        {/* Logo Section (Moved to Bottom) */}
+        <div className="p-6 mt-auto border-t border-white/5 bg-white/5">
+           <div className="flex items-center gap-3 opacity-90 hover:opacity-100 transition-opacity">
+             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
+               <LayoutDashboard className="w-5 h-5 text-white" />
+             </div>
+             <div>
+                <h1 className="font-bold text-lg tracking-tight leading-none">FinancePro</h1>
+                <p className="text-[10px] text-gray-500 mt-0.5">Personal Finance App</p>
+             </div>
+           </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -98,7 +122,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
             className="group flex items-center gap-2 bg-primary hover:bg-rose-600 text-white rounded-full p-4 md:px-6 md:py-4 shadow-lg shadow-primary/30 transition-all active:scale-95"
           >
             <Plus className="w-6 h-6 md:w-5 md:h-5" />
-            <span className="hidden md:block font-bold">New Transaction</span>
+            <span className="hidden md:block font-bold">{lang === 'en' ? 'New Transaction' : 'Transaksi Baru'}</span>
           </button>
         </div>
       </main>

@@ -8,10 +8,12 @@ import AssetAnalytics, { AnalyticsScope } from './components/AssetAnalytics';
 import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
-import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle } from 'lucide-react';
+import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Database } from 'lucide-react';
 import { subYears, addDays, getDate, getMonth, isSaturday, isSunday, format } from 'date-fns';
-import { auth, googleProvider } from './services/firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+
+// Note: Supabase is prepared in services/supabase.ts but not actively hooked up to auth yet
+// per user request to stick to Local Account only for now.
+// import { supabase, isSupabaseConfigured } from './services/supabase';
 
 const ACCENT_PRESETS = [
     { name: 'Emerald', value: '#10b981' },
@@ -53,7 +55,7 @@ const App = () => {
   const [showAssetAnalytics, setShowAssetAnalytics] = useState(false);
   const [analyticsScope, setAnalyticsScope] = useState<AnalyticsScope>({ type: 'GLOBAL' });
 
-  // Auth State
+  // Auth State (LOCAL ONLY)
   const [user, setUser] = useState<{name: string, email: string} | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
@@ -73,7 +75,6 @@ const App = () => {
   const [newTxToAccountId, setNewTxToAccountId] = useState('');
   const [newTxDate, setNewTxDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [newTxNotes, setNewTxNotes] = useState('');
-  // New: Owner Filter for Transaction Modal
   const [newTxOwnerFilter, setNewTxOwnerFilter] = useState<'All' | AccountOwner>('All');
 
   // --- EDIT ACCOUNT MODAL STATE ---
@@ -130,7 +131,7 @@ const App = () => {
         setCategories(data.categories || DEFAULT_CATEGORIES);
         setLang(data.lang || 'en');
         
-        // Handle User Session from LocalStorage (Fallback if Firebase not used)
+        // Handle User Session from LocalStorage
         if(data.user) setUser(data.user);
 
         if(data.theme) {
@@ -168,46 +169,10 @@ const App = () => {
      }));
   }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
 
-  // --- FIREBASE AUTH SYNC ---
-  useEffect(() => {
-    if (auth) {
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-            if (firebaseUser) {
-                // User is signed in
-                setUser({ 
-                    name: firebaseUser.displayName || firebaseUser.email || 'User', 
-                    email: firebaseUser.email || '' 
-                });
-            } else {
-                // User is signed out, but we might want to keep local session if manual
-                // For now, let's strictly follow firebase state if it was initiated
-                // setUser(null); // Optional: Uncomment to force logout when firebase session ends
-            }
-        });
-        return () => unsubscribe();
-    }
-  }, []);
-
-  // --- AUTH HANDLERS ---
-  const handleLocalLogin = async () => {
+  // --- AUTH HANDLERS (LOCAL ONLY) ---
+  const handleLocalLogin = () => {
       setAuthError('');
       
-      // Try Firebase First
-      if (auth) {
-          try {
-              const userCredential = await signInWithEmailAndPassword(auth, regEmail, regPass);
-              const u = userCredential.user;
-              setUser({ name: u.displayName || u.email || 'User', email: u.email || '' });
-              setShowAuthModal(false);
-              setRegEmail(''); setRegPass('');
-              return;
-          } catch (error: any) {
-              console.log("Firebase Login Failed, trying local:", error.message);
-              // Fallthrough to Local Storage check
-          }
-      }
-
-      // Local Storage Fallback
       const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
       const found = storedUsers.find((u: any) => u.email === regEmail && u.password === regPass);
       
@@ -217,33 +182,18 @@ const App = () => {
           setAuthError('');
           setRegEmail(''); setRegPass('');
       } else {
-          setAuthError('Invalid email or password (Local & Cloud failed).');
+          setAuthError('Account not found locally. Did you Register first?');
       }
   };
 
-  const handleRegister = async () => {
+  const handleRegister = () => {
       if(!regName || !regEmail || !regPass) {
           setAuthError('All fields are required.');
           return;
       }
       setAuthError('');
 
-      // Try Firebase Registration
-      if (auth) {
-          try {
-             await createUserWithEmailAndPassword(auth, regEmail, regPass);
-             // Note: Updating display name in Firebase requires another call, skipping for brevity
-             setUser({ name: regName, email: regEmail });
-             setShowAuthModal(false);
-             setRegEmail(''); setRegPass(''); setRegName('');
-             return;
-          } catch (error: any) {
-             setAuthError(error.message);
-             return;
-          }
-      }
-
-      // Local Storage Fallback
+      // Local Storage Registration
       const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
       if (storedUsers.find((u: any) => u.email === regEmail)) {
           setAuthError('Email already registered locally.');
@@ -257,27 +207,10 @@ const App = () => {
       setShowAuthModal(false);
       setAuthError('');
       setRegEmail(''); setRegPass(''); setRegName('');
+      alert("Account created locally! Your data will be saved to this browser.");
   };
 
-  const handleGoogleLogin = async () => {
-      if (!auth || !googleProvider) {
-          setAuthError('Google Login is not configured. Please add Firebase keys in services/firebase.ts');
-          return;
-      }
-
-      try {
-          const result = await signInWithPopup(auth, googleProvider);
-          const u = result.user;
-          setUser({ name: u.displayName || 'Google User', email: u.email || '' });
-          setShowAuthModal(false);
-      } catch (error: any) {
-          console.error(error);
-          setAuthError('Google Login Failed: ' + error.message);
-      }
-  };
-  
   const handleLogout = () => {
-      if (auth) signOut(auth);
       setUser(null);
   };
 
@@ -843,6 +776,8 @@ const App = () => {
       user={user}
       onAuthRequest={() => { setShowAuthModal(true); setAuthMode('LOGIN'); }}
       onLogout={handleLogout}
+      lang={lang}
+      setLang={setLang}
     >
         {renderContent()}
 
@@ -1143,7 +1078,7 @@ const App = () => {
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-2">{authMode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}</h2>
                     <p className="text-gray-400 text-sm mb-6">
-                        {authMode === 'LOGIN' ? 'Login to sync your financial data.' : 'Register to secure your local data.'}
+                        {authMode === 'LOGIN' ? 'Login to access your local data.' : 'Register to secure your local data.'}
                     </p>
                     
                     {authError && (
@@ -1192,18 +1127,12 @@ const App = () => {
 
                     <div className="space-y-3">
                         {authMode === 'LOGIN' ? (
-                            <>
-                                <button onClick={handleLocalLogin} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
-                                    Log In
-                                </button>
-                                <button onClick={handleGoogleLogin} className="w-full py-3 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-gray-200 transition-colors">
-                                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S14.89 2 12.2 2c-5.53 0-10 4.47-10 10s4.47 10 10 10c5.77 0 10-4.75 10-10c0-.88-.09-1.53-.15-1.9z"/></svg>
-                                    Sign in with Google
-                                </button>
-                            </>
+                            <button onClick={handleLocalLogin} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+                                Log In (Local)
+                            </button>
                         ) : (
                             <button onClick={handleRegister} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/20">
-                                Register Account
+                                Register (Local)
                             </button>
                         )}
                     </div>
