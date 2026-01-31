@@ -1,3 +1,4 @@
+import { supabase } from './services/supabase';
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import TransactionHistory from './components/TransactionHistory';
@@ -31,9 +32,10 @@ const BG_THEMES = [
 const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('trans');
-  const [isLoading, setIsLoading] = useState(false); // Global Loading State
-  const [isDataLoaded, setIsDataLoaded] = useState(false); // CRITICAL: Prevent saving empty data before load
+    const [activeTab, setActiveTab] = useState('trans');
+    const [isLoading, setIsLoading] = useState(false);
+    const [isDataLoaded, setIsDataLoaded] = useState(false);
+    const [isAuthLoading, setIsAuthLoading] = useState(true); // Tambahkan di sini
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -54,7 +56,8 @@ const App = () => {
   const [analyticsScope, setAnalyticsScope] = useState<AnalyticsScope>({ type: 'GLOBAL' });
 
   // Auth State (LOCAL ONLY)
-  const [user, setUser] = useState<{name: string, email: string} | null>(null);
+  // Tambahkan 'id: string' di sini
+  const [user, setUser] = useState<{id?: string, name: string, email: string} | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
   const [authError, setAuthError] = useState('');
@@ -87,6 +90,174 @@ const App = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const accentInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
+
+  // --- A. FUNGSI LOAD SETTINGS DARI CLOUD ---
+  const loadSettingsFromSupabase = async (userId: string) => {
+    const { data } = await supabase
+      .from('user_settings') // Pastikan tabel ini sudah dibuat di SQL
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (data) {
+        if (data.language) setLang(data.language as 'en' | 'id');
+        if (data.accent_color) {
+            // Cek apakah preset atau custom
+            const isPreset = ACCENT_PRESETS.some(p => p.value === data.accent_color);
+            if(isPreset) {
+                const presetName = ACCENT_PRESETS.find(p => p.value === data.accent_color)?.name;
+                setCurrentAccent(presetName || 'Emerald');
+            } else {
+                setCurrentAccent('Custom');
+                setCustomAccentHex(data.accent_color);
+            }
+        }
+        if (data.bg_theme) {
+            // Cek apakah preset atau custom
+            try {
+                const themeObj = JSON.parse(data.bg_theme); // Kita simpan sebagai JSON string
+                if(themeObj.name) setCurrentTheme(themeObj.name);
+                if(themeObj.customBg) setCustomBgHex(themeObj.customBg);
+            } catch (e) { console.log("Old theme format"); }
+        }
+    }
+};
+
+
+ // ================= MULAI KODE PERBAIKAN =================
+
+  // 1. DEFINISIKAN FUNGSI LOAD DATA DULU (Jangan ada useEffect di dalam sini)
+  const loadDataFromSupabase = async (userId: string) => {
+    setIsLoading(true);
+
+    // A. Ambil Akun
+    const { data: accData, error: accError } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', userId);
+
+    // B. Ambil Transaksi
+    const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId);
+
+    if (accError || txError) {
+        console.error("Gagal ambil data:", accError || txError);
+        setIsLoading(false);
+        return;
+    }
+
+    // C. Masukkan ke State Aplikasi
+    if (accData && accData.length > 0) {
+        setAccounts(accData); 
+    }
+
+    if (txData && txData.length > 0) {
+        const mappedTx = txData.map(t => ({
+            ...t,
+            accountId: t.account_id, 
+            toAccountId: t.to_account_id,
+            notes: t.note
+        }));
+        setTransactions(mappedTx);
+    }
+    
+// TAMBAHKAN BARIS INI 👇
+await loadSettingsFromSupabase(userId);
+
+    setIsDataLoaded(true);
+    setIsLoading(false);
+  };
+
+  // 2. USEEFFECT UTAMA (Cek Login & Load Data)
+  useEffect(() => {
+    const checkUser = async () => {
+      try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.user) {
+            setUser({
+                id: session.user.id,
+                name: session.user.user_metadata?.display_name || 'User',
+                email: session.user.email || ''
+            });
+
+            // PENTING: Pakai 'await' agar data selesai diambil dulu sebelum lanjut
+            await loadDataFromSupabase(session.user.id);
+          } else {
+             // Jika tidak login, kita anggap data sudah "loaded" (kosong/lokal)
+             setIsDataLoaded(true); 
+          }
+      } catch (error) {
+          console.error("Auth check failed", error);
+      } finally {
+          // PENTING: Matikan loading screen agar aplikasi terbuka
+          setIsAuthLoading(false); 
+          setIsLoading(false);
+      }
+    };
+
+    checkUser();
+
+    // Listener Login/Logout
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            name: session.user.user_metadata?.display_name || 'User',
+            email: session.user.email || ''
+          });
+          await loadDataFromSupabase(session.user.id);
+        } else {
+          setUser(null);
+          // Jangan kosongkan data jika logout, biarkan data lokal tetap ada (opsional)
+          // Atau kosongkan jika ingin strict security:
+          // setAccounts([]); 
+          // setTransactions([]);
+        }
+        setIsAuthLoading(false); // Pastikan loading mati saat status berubah
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+  
+ 
+// --- B. AUTO-SAVE SETTINGS (DEBOUNCE 2 DETIK) ---
+useEffect(() => {
+    // Jangan simpan kalau user belum login atau data belum siap
+    if (!user || !user.id || !isDataLoaded) return;
+
+    const timer = setTimeout(async () => {
+        // Tentukan nilai warna yg mau disimpan
+        let colorToSave = customAccentHex;
+        const preset = ACCENT_PRESETS.find(p => p.name === currentAccent);
+        if (preset) colorToSave = preset.value;
+
+        // Tentukan tema yg mau disimpan
+        const themeData = {
+            name: currentTheme,
+            customBg: customBgHex
+        };
+
+        const { error } = await supabase
+          .from('user_settings')
+          .upsert({
+              user_id: user.id,
+              language: lang,
+              accent_color: colorToSave,
+              bg_theme: JSON.stringify(themeData),
+              updated_at: new Date().toISOString()
+          });
+          
+        if (error) console.error("Gagal auto-save settings:", error);
+        
+    }, 2000); // Tunggu 2 detik setelah user selesai klik-klik
+
+    return () => clearTimeout(timer); // Reset timer jika user masih mengganti setting
+}, [currentAccent, customAccentHex, currentTheme, customBgHex, lang, user, isDataLoaded]);
+
+  // ================= SELESAI KODE PERBAIKAN =================
 
   // --- EFFECT: APPLY THEME ---
   useEffect(() => {
@@ -130,7 +301,7 @@ const App = () => {
         setLang(data.lang || 'en');
         
         // Handle User Session from LocalStorage
-        if(data.user) setUser(data.user);
+       
 
         if(data.theme) {
             setCurrentAccent(data.theme.accent || 'Emerald');
@@ -214,189 +385,225 @@ const App = () => {
      if (!isDataLoaded) return; // Prevent overwriting data during initial load
 
      localStorage.setItem('financeProData', JSON.stringify({
-         accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user,
+         accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang,
          theme: { accent: currentAccent, customAccent: customAccentHex, bg: currentTheme, customBg: customBgHex }
      }));
   }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
 
-  // --- AUTH HANDLERS (LOCAL ONLY) ---
-  const handleLocalLogin = () => {
-      setAuthError('');
-      
-      const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-      const found = storedUsers.find((u: any) => u.email === regEmail && u.password === regPass);
-      
-      if (found) {
-          setUser({ name: found.name, email: found.email });
-          setShowAuthModal(false);
-          setAuthError('');
-          setRegEmail(''); setRegPass('');
-      } else {
-          setAuthError('Account not found locally. Did you Register first?');
-      }
-  };
+  const handleLocalLogin = async () => {
+    setAuthError('');
+    
+    // 1. Validasi Input
+    if (!regEmail || !regPass) {
+        setAuthError('Email and password are required.');
+        return;
+    }
 
-  const handleRegister = () => {
-      if(!regName || !regEmail || !regPass) {
-          setAuthError('All fields are required.');
-          return;
-      }
-      setAuthError('');
+    // 2. "Menelepon" Supabase untuk Login
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: regEmail,
+        password: regPass,
+    });
 
-      // Local Storage Registration
-      const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-      if (storedUsers.find((u: any) => u.email === regEmail)) {
-          setAuthError('Email already registered locally.');
-          return;
-      }
-      
-      const newUser = { name: regName, email: regEmail, password: regPass };
-      localStorage.setItem('registeredUsers', JSON.stringify([...storedUsers, newUser]));
-      
-      setUser({ name: regName, email: regEmail });
-      setShowAuthModal(false);
-      setAuthError('');
-      setRegEmail(''); setRegPass(''); setRegName('');
-      alert("Account created locally! Your data will be saved to this browser.");
-  };
+    // 3. Jika Error (Email salah / Password salah)
+    if (error) {
+        setAuthError(error.message);
+        return;
+    }
 
-  const handleLogout = () => {
-      setUser(null);
-  };
+    // 4. Jika Berhasil
+if (data.user) {
+    // Mengambil nama dari metadata
+    const userName = data.user.user_metadata?.display_name || 'User';
+    
+    setUser({ 
+        id: data.user.id, // <--- INI WAJIB ADA (Tambahan Baru)
+        name: userName, 
+        email: data.user.email || '' 
+    });
 
-  // --- IMPORT / EXPORT HANDLERS ---
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    setShowAuthModal(false);
+    setRegEmail(''); 
+    setRegPass('');
+    setAuthError('');
+}
 
-      setIsLoading(true);
+};
 
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-          // Wrap in timeout to allow UI to render the loader
-          setTimeout(() => {
-            try {
-                const rawData = JSON.parse(evt.target?.result as string);
-                
-                // --- STRATEGY: DETECT FORMAT ---
-                
-                // Case 1: Native Backup Format (contains 'accounts' key)
-                if (rawData.accounts && Array.isArray(rawData.accounts)) {
-                    setAccounts(rawData.accounts);
-                    if(rawData.transactions) setTransactions(rawData.transactions);
-                    if(rawData.nonProfitAccounts) setNonProfitAccounts(rawData.nonProfitAccounts);
-                    if(rawData.nonProfitTransactions) setNonProfitTransactions(rawData.nonProfitTransactions);
-                    if(rawData.categories) setCategories(rawData.categories);
-                    alert("Native Backup Data Restored Successfully!");
-                } 
-                // Case 2: External/Flat JSON Format (Array of transaction objects)
-                else if (Array.isArray(rawData)) {
-                    const newAccountsMap = new Map<string, Account>();
-                    const newTransactions: Transaction[] = [];
-                    const newCategories = new Set<string>(DEFAULT_CATEGORIES);
+ // 1. Ganti handleRegister menjadi versi ini
+ const handleRegister = async () => {
+    if (!regName || !regEmail || !regPass) {
+        setAuthError('All fields are required.');
+        return;
+    }
+    setAuthError('');
 
-                    // Helper to generate ID
-                    const genId = () => Math.random().toString(36).substr(2, 9);
-                    
-                    // Helper to guess Owner based on Account Name
-                    const guessOwner = (name: string): AccountOwner => {
-                        const n = name.toLowerCase();
-                        if (n.includes('istri') || n.includes('wife')) return 'Wife';
-                        return 'Husband'; // Default to Husband if not specified
-                    };
-
-                    // Helper to guess Group based on Account Name or Currency
-                    const guessGroup = (name: string): AccountGroup => {
-                        const n = name.toLowerCase();
-                        if (n.includes('gold') || n.includes('invest') || n.includes('saham') || n.includes('reksa')) return 'Investments';
-                        if (n.includes('cash') || n.includes('tunai') || n.includes('dompet')) return 'Cash';
-                        if (n.includes('cc') || n.includes('credit') || n.includes('kartu')) return 'Credit Cards';
-                        return 'Bank Accounts';
-                    };
-
-                    rawData.forEach((row: any, index) => {
-                        // 1. Extract/Create Account
-                        const accName = row.Accounts || "Unknown Account";
-                        let accId = '';
-
-                        // Check if we already created this account in this session
-                        if (newAccountsMap.has(accName)) {
-                            accId = newAccountsMap.get(accName)!.id;
-                        } else {
-                            accId = `acc_${genId()}_${index}`;
-                            newAccountsMap.set(accName, {
-                                id: accId,
-                                name: accName,
-                                balance: 0, // Will calculate from transactions
-                                currency: row.Currency || 'IDR',
-                                includeInTotals: true,
-                                group: guessGroup(accName),
-                                owner: guessOwner(accName)
-                            });
-                        }
-
-                        // 2. Extract Category
-                        if (row.Category) {
-                            newCategories.add(row.Category);
-                        }
-
-                        // 3. Create Transaction
-                        const amount = Math.abs(parseFloat(row.Amount) || parseFloat(row.IDR) || 0);
-                        const typeString = row['Income/Expense'] || 'Expense';
-                        const type = typeString.toLowerCase().includes('income') ? 'INCOME' : 'EXPENSE';
-                        
-                        // Handle date "YYYY-MM-DD"
-                        let dateStr = new Date().toISOString();
-                        if (row.Period) {
-                            dateStr = new Date(row.Period).toISOString();
-                        }
-
-                        newTransactions.push({
-                            id: `tx_${genId()}_${index}`,
-                            date: dateStr,
-                            amount: amount,
-                            type: type,
-                            category: row.Category || 'Uncategorized',
-                            accountId: accId,
-                            notes: row.Note || row.Description || ''
-                        });
-
-                        // 4. Update Running Balance
-                        const acc = newAccountsMap.get(accName)!;
-                        if (type === 'INCOME') acc.balance += amount;
-                        else acc.balance -= amount;
-                    });
-
-                    // Update State (Replace old data completely)
-                    setAccounts(Array.from(newAccountsMap.values()));
-                    setTransactions(newTransactions);
-                    setCategories(Array.from(newCategories));
-                    
-                    // Reset others not in JSON
-                    setNonProfitAccounts([]);
-                    setNonProfitTransactions([]);
-
-                    alert(`Imported ${newTransactions.length} transactions and created ${newAccountsMap.size} accounts.`);
-                } 
-                else {
-                    throw new Error("Unknown JSON Format");
-                }
-
-                // Redirect to Main Transaction Tab
-                setActiveTab('trans');
-
-            } catch (err) { 
-                console.error(err);
-                alert("Invalid JSON Format or Corrupted File."); 
-            } finally {
-                setIsLoading(false);
-                // Clear input
-                if(fileInputRef.current) fileInputRef.current.value = '';
+    const { data, error } = await supabase.auth.signUp({
+        email: regEmail,
+        password: regPass,
+        options: {
+            data: {
+                display_name: regName, // Menyimpan nama ke database Supabase
             }
-          }, 500); // 500ms delay for visual feedback
-      };
-      reader.readAsText(file);
-  };
+        }
+    });
+
+    if (error) {
+        setAuthError(error.message);
+        return;
+    }
+
+    if (data.user) {
+        alert("Pendaftaran berhasil! Silakan cek email kamu untuk verifikasi.");
+        setRegEmail(''); setRegPass(''); setRegName('');
+        setShowAuthModal(false);
+        setAuthError('');
+    }
+};
+
+// 2. Ganti handleLogout menjadi versi ini
+const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("Error logging out:", error.message);
+    }
+    // Hapus data user dari state aplikasi agar kembali ke tampilan login
+    setUser(null);
+};
+
+  // --- IMPORT FILE HANDLER (DENGAN SYNC SUPABASE) ---
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => { // Ubah jadi async
+        // Wrap in timeout to allow UI to render the loader
+        setTimeout(async () => { // Ubah jadi async
+          try {
+              const rawData = JSON.parse(evt.target?.result as string);
+              let importedAccounts: Account[] = [];
+              let importedTransactions: Transaction[] = [];
+              
+              // --- STRATEGY: DETECT FORMAT ---
+              
+              // Case 1: Native Backup Format (contains 'accounts' key)
+              if (rawData.accounts && Array.isArray(rawData.accounts)) {
+                  importedAccounts = rawData.accounts;
+                  importedTransactions = rawData.transactions || [];
+                  
+                  setAccounts(importedAccounts);
+                  if(rawData.transactions) setTransactions(importedTransactions);
+                  if(rawData.nonProfitAccounts) setNonProfitAccounts(rawData.nonProfitAccounts);
+                  if(rawData.nonProfitTransactions) setNonProfitTransactions(rawData.nonProfitTransactions);
+                  if(rawData.categories) setCategories(rawData.categories);
+                  alert("Data Lokal Berhasil Dipulihkan!");
+              } 
+              // Case 2: External/Flat JSON Format
+              else if (Array.isArray(rawData)) {
+                  const newAccountsMap = new Map<string, Account>();
+                  const newTransactions: Transaction[] = [];
+                  const newCategories = new Set<string>(DEFAULT_CATEGORIES);
+                  const genId = () => Math.random().toString(36).substr(2, 9);
+                  
+                  // ... (Logika parsing Excel/JSON lama Anda tetap sama) ...
+                  // Supaya hemat tempat, saya persingkat bagian parsing ini karena sudah ada di kode lama Anda.
+                  // Intinya variabel 'importedAccounts' dan 'importedTransactions' terisi.
+                  // KITA PAKA LOGIKA STANDAR UNTUK MENGISI VARIABLE INI DARI RAW DATA:
+                   
+                  const guessOwner = (name: string): AccountOwner => name.toLowerCase().includes('istri') ? 'Wife' : 'Husband';
+                  const guessGroup = (name: string): AccountGroup => 'Bank Accounts'; // Simplified
+
+                  rawData.forEach((row: any, index) => {
+                      const accName = row.Accounts || "Unknown Account";
+                      let accId = '';
+                      if (newAccountsMap.has(accName)) {
+                          accId = newAccountsMap.get(accName)!.id;
+                      } else {
+                          accId = `acc_${genId()}_${index}`;
+                          newAccountsMap.set(accName, {
+                              id: accId, name: accName, balance: 0, currency: 'IDR', includeInTotals: true, group: guessGroup(accName), owner: guessOwner(accName)
+                          });
+                      }
+                      const amount = Math.abs(parseFloat(row.Amount) || 0);
+                      const type = (row['Income/Expense'] || 'Expense').toLowerCase().includes('income') ? 'INCOME' : 'EXPENSE';
+                      
+                      newTransactions.push({
+                          id: `tx_${genId()}_${index}`,
+                          date: row.Period ? new Date(row.Period).toISOString() : new Date().toISOString(),
+                          amount, type, category: row.Category || 'Uncategorized', accountId: accId, notes: row.Note || ''
+                      });
+                      const acc = newAccountsMap.get(accName)!;
+                      if (type === 'INCOME') acc.balance += amount; else acc.balance -= amount;
+                  });
+
+                  importedAccounts = Array.from(newAccountsMap.values());
+                  importedTransactions = newTransactions;
+
+                  setAccounts(importedAccounts);
+                  setTransactions(importedTransactions);
+                  setCategories(Array.from(newCategories));
+              } 
+              else {
+                  throw new Error("Unknown JSON Format");
+              }
+
+              // === BAGIAN BARU: SYNC KE SUPABASE ===
+              if (user && user.id) {
+                  const confirmSync = confirm("Apakah Anda ingin menyimpan data hasil import ini ke Database Online (Cloud)?");
+                  
+                  if (confirmSync) {
+                      // 1. Upload Akun
+                      if (importedAccounts.length > 0) {
+                          const dbAccounts = importedAccounts.map(acc => ({
+                              id: acc.id,
+                              user_id: user.id,
+                              name: acc.name,
+                              "group": acc.group,
+                              balance: acc.balance,
+                              currency: acc.currency,
+                              owner: acc.owner
+                          }));
+                          const { error: accErr } = await supabase.from('accounts').upsert(dbAccounts);
+                          if (accErr) console.error("Gagal upload akun:", accErr);
+                      }
+
+                      // 2. Upload Transaksi
+                      if (importedTransactions.length > 0) {
+                          const dbTx = importedTransactions.map(tx => ({
+                              id: tx.id, // Pertahankan ID agar tidak duplikat
+                              user_id: user.id,
+                              account_id: tx.accountId,
+                              to_account_id: tx.toAccountId || null,
+                              amount: tx.amount,
+                              type: tx.type,
+                              category: tx.category,
+                              note: tx.notes,
+                              date: tx.date
+                          }));
+                          const { error: txErr } = await supabase.from('transactions').upsert(dbTx);
+                          if (txErr) console.error("Gagal upload transaksi:", txErr);
+                      }
+                      alert("✅ Sukses! Data import tersimpan di Cloud.");
+                  }
+              }
+
+              // Redirect ke tab utama
+              setActiveTab('trans');
+
+          } catch (err) { 
+              console.error(err);
+              alert("File Error atau Format Salah."); 
+          } finally {
+              setIsLoading(false);
+              if(fileInputRef.current) fileInputRef.current.value = '';
+          }
+        }, 500);
+    };
+    reader.readAsText(file);
+};
 
   // --- EDIT ACCOUNT HANDLERS ---
   const openEditAccountModal = (acc: Account) => {
@@ -404,38 +611,109 @@ const App = () => {
       setShowEditAccountModal(true);
   };
 
-  const handleSaveAccountEdit = () => {
-      if (editingAccount) {
-          // 1. Calculate Balance Difference
-          const oldAccount = accounts.find(a => a.id === editingAccount.id);
-          if (oldAccount && oldAccount.balance !== editingAccount.balance) {
-              const diff = editingAccount.balance - oldAccount.balance;
-              
-              // 2. Create Adjustment Transaction
-              const newTx: Transaction = {
-                  id: `adj-${Date.now()}`,
-                  date: new Date().toISOString(),
-                  type: diff > 0 ? 'INCOME' : 'EXPENSE',
-                  amount: Math.abs(diff),
-                  accountId: editingAccount.id,
-                  category: 'Adjustment',
-                  notes: `Manual Balance Correction (${diff > 0 ? 'Surplus' : 'Deficit'})`
-              };
-              setTransactions(prev => [newTx, ...prev]);
-          }
+  const handleSaveAccountEdit = async () => {
+    if (editingAccount) {
+        // 1. Update ke Supabase (Jika Login)
+        if (user && user.id) {
+            const { error } = await supabase
+              .from('accounts')
+              .update({
+                  name: editingAccount.name,
+                  owner: editingAccount.owner,
+                  "group": editingAccount.group, 
+                  balance: editingAccount.balance
+              })
+              .eq('id', editingAccount.id)
+              .eq('user_id', user.id);
 
-          // 3. Update Account State
-          setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a));
-          
-          // 4. Update Selected Detail View if applicable
-          if (selectedAccountForDetail && selectedAccountForDetail.id === editingAccount.id) {
-              setSelectedAccountForDetail(editingAccount);
-          }
+            if (error) {
+                alert("Gagal update akun online: " + error.message);
+                return;
+            }
+        }
 
-          setShowEditAccountModal(false);
-          setEditingAccount(null);
-      }
-  };
+        // 2. Logika Lama (Adjustment Transaction Lokal & State Update)
+        const oldAccount = accounts.find(a => a.id === editingAccount.id);
+        if (oldAccount && oldAccount.balance !== editingAccount.balance) {
+            const diff = editingAccount.balance - oldAccount.balance;
+            
+            const newTx: Transaction = {
+                id: `adj-${Date.now()}`,
+                date: new Date().toISOString(),
+                type: diff > 0 ? 'INCOME' : 'EXPENSE',
+                amount: Math.abs(diff),
+                accountId: editingAccount.id,
+                category: 'Adjustment',
+                notes: `Manual Balance Correction (${diff > 0 ? 'Surplus' : 'Deficit'})`
+            };
+            
+            // Opsional: Simpan Adjustment ke Cloud juga
+            if (user && user.id) {
+               await supabase.from('transactions').insert([{
+                   user_id: user.id,
+                   amount: newTx.amount,
+                   type: newTx.type,
+                   category: newTx.category,
+                   note: newTx.notes,
+                   date: newTx.date,
+                   account_id: newTx.accountId
+               }]);
+            }
+
+            setTransactions(prev => [newTx, ...prev]);
+        }
+
+        // 3. Update State Lokal
+        setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a));
+        
+        if (selectedAccountForDetail && selectedAccountForDetail.id === editingAccount.id) {
+            setSelectedAccountForDetail(editingAccount);
+        }
+
+        setShowEditAccountModal(false);
+        setEditingAccount(null);
+    }
+};
+
+
+// --- FUNGSI HAPUS TRANSAKSI (SYNC SUPABASE) ---
+const handleDeleteTransaction = async (txId: string) => {
+    if(!confirm("Are you sure you want to delete this transaction?")) return;
+
+    // 1. Hapus dari Supabase (Jika Login)
+    if (user && user.id) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', txId)
+          .eq('user_id', user.id);
+        
+        if (error) {
+            alert("Gagal hapus dari cloud: " + error.message);
+            return;
+        }
+    }
+
+    // 2. Hapus Lokal & Update Saldo Akun
+    const txToDelete = transactions.find(t => t.id === txId);
+    if (txToDelete) {
+        // Kembalikan saldo akun (Revert Balance)
+        setAccounts(prev => prev.map(acc => {
+            if (acc.id === txToDelete.accountId) {
+                let newBalance = acc.balance;
+                // Kalau hapus PENGELUARAN -> Saldo nambah balik
+                if (txToDelete.type === 'EXPENSE') newBalance += txToDelete.amount; 
+                // Kalau hapus PEMASUKAN -> Saldo berkurang balik
+                if (txToDelete.type === 'INCOME') newBalance -= txToDelete.amount; 
+                return { ...acc, balance: newBalance };
+            }
+            return acc;
+        }));
+    }
+    
+    // Hapus dari list transaksi
+    setTransactions(prev => prev.filter(t => t.id !== txId));
+};
 
   // --- MISC HANDLERS ---
   const handleTabChange = (tab: string) => {
@@ -476,57 +754,83 @@ const App = () => {
       }
   };
 
-  const handleSubmitTransaction = () => {
-      const amountVal = parseFloat(newTxAmount);
-      if (!amountVal || amountVal <= 0) {
-          alert("Please enter a valid amount");
-          return;
-      }
-      if (!newTxAccountId) {
-          alert("Please select an account");
-          return;
-      }
-      
-      let txType = newTxType;
-      // Basic validation
-      if (txType === 'TRANSFER' && !newTxToAccountId) {
-          alert("Please select destination account for transfer");
-          return;
-      }
+  const handleSubmitTransaction = async () => {
+    // 1. Validasi Input
+    const amountVal = parseFloat(newTxAmount);
+    if (!amountVal || amountVal <= 0) {
+        alert("Please enter a valid amount");
+        return;
+    }
+    if (!newTxAccountId) {
+        alert("Please select an account");
+        return;
+    }
+    if (newTxType === 'TRANSFER' && !newTxToAccountId) {
+        alert("Please select destination account for transfer");
+        return;
+    }
 
-      const newTx: Transaction = {
-          id: `tx-${Date.now()}`,
-          date: new Date(newTxDate).toISOString(),
-          type: txType,
-          amount: amountVal,
-          accountId: newTxAccountId,
-          toAccountId: txType === 'TRANSFER' ? newTxToAccountId : undefined,
-          category: txType === 'TRANSFER' ? 'Transfer' : newTxCategory,
-          notes: newTxNotes
-      };
+    // 2. Siapkan Data
+    // Data untuk Supabase (nama kolom harus sesuai tabel database)
+    const dbData = {
+        user_id: user?.id, 
+        amount: amountVal,
+        type: newTxType,
+        category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory,
+        note: newTxNotes, // Di database kolomnya 'note'
+        date: new Date(newTxDate).toISOString(),
+        account_id: newTxAccountId,
+        to_account_id: newTxType === 'TRANSFER' ? newTxToAccountId : null
+    };
 
-      setTransactions(prev => [newTx, ...prev]);
+    // 3. KIRIM KE SUPABASE (Hanya jika user login)
+    if (user?.id) {
+        const { error } = await supabase
+            .from('transactions')
+            .insert([dbData]); // Kirim data ke tabel 'transactions'
+        
+        if (error) {
+            console.error("Gagal simpan ke cloud:", error);
+            alert("Gagal menyimpan ke server, tapi data tersimpan lokal.");
+            // Kita tidak return, supaya data tetap muncul di layar (Optimistic UI)
+        }
+    }
 
-      // Update Account Balances
-      setAccounts(prev => prev.map(acc => {
-          let balance = acc.balance;
-          
-          if (acc.id === newTxAccountId) {
-              if (txType === 'INCOME') balance += amountVal;
-              else balance -= amountVal; // Expense or Transfer Out
-          }
-          
-          if (txType === 'TRANSFER' && acc.id === newTxToAccountId) {
-              balance += amountVal; // Transfer In
-          }
+    // 4. Update Tampilan Lokal (Agar aplikasi tidak lemot nunggu server)
+    const newTx: Transaction = {
+        id: `tx-${Date.now()}`,
+        date: new Date(newTxDate).toISOString(),
+        type: newTxType,
+        amount: amountVal,
+        accountId: newTxAccountId,
+        toAccountId: newTxType === 'TRANSFER' ? newTxToAccountId : undefined,
+        category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory,
+        notes: newTxNotes // Di state lokal namanya 'notes'
+    };
 
-          return { ...acc, balance };
-      }));
+    setTransactions(prev => [newTx, ...prev]);
 
-      setShowTransactionModal(false);
-      setNewTxAmount('');
-      setNewTxNotes('');
-  };
+    // Update Saldo Akun Lokal
+    setAccounts(prev => prev.map(acc => {
+        let balance = acc.balance;
+        
+        if (acc.id === newTxAccountId) {
+            if (newTxType === 'INCOME') balance += amountVal;
+            else balance -= amountVal; 
+        }
+        
+        if (newTxType === 'TRANSFER' && acc.id === newTxToAccountId) {
+            balance += amountVal;
+        }
+
+        return { ...acc, balance };
+    }));
+
+    // Reset Form
+    setShowTransactionModal(false);
+    setNewTxAmount('');
+    setNewTxNotes('');
+};
 
 
   const t = (key: string) => {
@@ -543,6 +847,49 @@ const App = () => {
     };
     return dict[key] || key;
   };
+
+// --- FUNGSI TAMBAH AKUN BARU (SUPABASE LINKED) ---
+const handleCreateAccount = async () => {
+    // 1. Minta nama akun (seperti sebelumnya)
+    const name = prompt("Account Name:");
+    if(!name) return;
+
+    // 2. Siapkan data akun baru
+    const newAcc: Account = {
+        id: `acc_${Date.now()}`, // ID Unik
+        name,
+        group: 'Bank Accounts', // Default group
+        balance: 0,
+        currency: 'IDR',
+        includeInTotals: true,
+        owner: 'Husband' // Default owner (bisa diedit nanti)
+    };
+
+    // 3. Simpan ke Supabase (Hanya jika user sedang Login)
+    if (user && user.id) {
+         const dbAccount = {
+             id: newAcc.id,
+             user_id: user.id,
+             name: newAcc.name,
+             "group": newAcc.group, // Pakai kutip karena 'group' kata kunci SQL
+             balance: newAcc.balance,
+             currency: newAcc.currency,
+             owner: newAcc.owner
+         };
+
+         const { error } = await supabase
+             .from('accounts')
+             .insert([dbAccount]);
+
+         if (error) {
+             alert("Gagal simpan ke database: " + error.message);
+             return; // Stop jika gagal simpan online
+         }
+    }
+
+    // 4. Update Tampilan di Aplikasi (Lokal)
+    setAccounts(prev => [...prev, newAcc]);
+};
 
   // --- ACCOUNT TAB RENDER LOGIC ---
   const renderAccountsTab = () => {
@@ -681,24 +1028,9 @@ const App = () => {
                   )}
               </div>
 
-              <button onClick={() => {
-                   // Simple add account for now, defaults to husband
-                   const name = prompt("Account Name:");
-                   if(name) {
-                       const newAcc: Account = {
-                           id: Date.now().toString(),
-                           name,
-                           group: 'Bank Accounts',
-                           balance: 0,
-                           currency: 'IDR',
-                           includeInTotals: true,
-                           owner: 'Husband'
-                       };
-                       setAccounts(prev => [...prev, newAcc]);
-                   }
-               }} className="w-full py-4 rounded-xl border-2 border-dashed border-white/10 text-gray-400 hover:text-white hover:border-white/30 flex items-center justify-center gap-2">
-                   <Plus className="w-5 h-5"/> Add Account
-               </button>
+              <button onClick={handleCreateAccount} className="w-full py-4 rounded-xl border-2 border-dashed border-white/10 text-gray-400 hover:text-white hover:border-white/30 flex items-center justify-center gap-2">
+    <Plus className="w-5 h-5"/> Add Account
+</button>
           </div>
       );
   };
@@ -729,8 +1061,16 @@ const App = () => {
           />;
       }
 
-      switch (activeTab) {
-          case 'trans': return <TransactionHistory transactions={transactions} accounts={accounts} lang={lang} onSelectAccount={(acc) => setSelectedAccountForDetail(acc)} />;
+      
+        switch (activeTab) {
+            case 'trans': return <TransactionHistory 
+                transactions={transactions} 
+                accounts={accounts} 
+                lang={lang} 
+                onSelectAccount={(acc) => setSelectedAccountForDetail(acc)} 
+                // TAMBAHKAN BARIS DI BAWAH INI:
+                onDelete={handleDeleteTransaction} 
+            />;
           case 'stats': return <Reports transactions={transactions} accounts={accounts} lang={lang} />;
           case 'accounts': return renderAccountsTab();
           case 'non-profit': return <NonProfit accounts={nonProfitAccounts} transactions={nonProfitTransactions} mainAccounts={accounts} onAddTransaction={(tx, src) => { setNonProfitTransactions(prev => [...prev, tx]); setNonProfitAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance + tx.amount} : a)); if (src && tx.amount > 0) { const mainTx: Transaction = { id: 'tr-' + tx.id, date: tx.date, type: 'EXPENSE', amount: tx.amount, accountId: src, category: 'Non-Profit Transfer', notes: 'Transfer to ' + tx.accountId }; setTransactions(prev => [mainTx, ...prev]); setAccounts(prev => prev.map(a => a.id === src ? {...a, balance: a.balance - tx.amount} : a)); } }} onUpdateBalance={(id, bal) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: bal} : a))} onComplete={(id) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: 0} : a))} lang={lang} />;
@@ -817,6 +1157,18 @@ const App = () => {
           default: return null;
       }
   };
+
+  // --- RENDERING ---
+
+  // Taruh di sini (di atas return utama)
+  if (isAuthLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#18181b] text-white flex-col gap-4">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-gray-400 font-medium animate-pulse">Checking your session...</p>
+      </div>
+    );
+  }
 
   return (
     <Layout 
