@@ -9,7 +9,7 @@ import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
 import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Database } from 'lucide-react';
-import { subYears, addDays, getDate, getMonth, isSaturday, isSunday, format } from 'date-fns';
+import { subDays, addDays, getDate, getMonth, isSaturday, isSunday, format, subMonths } from 'date-fns';
 
 // Note: Supabase is prepared in services/supabase.ts but not actively hooked up to auth yet
 // per user request to stick to Local Account only for now.
@@ -30,7 +30,7 @@ const BG_THEMES = [
     { name: 'Dark Berry', bg: '#2a0a18', surface: '#4a044e', surfaceLight: '#701a75' },
 ];
 
-const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Other'];
+const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('trans');
@@ -142,17 +142,69 @@ const App = () => {
         }
       } catch (e) { console.error("Failed to load data", e); }
     } else {
-        // Initial Dummy Data (Only if LocalStorage is empty)
-        const accs: Account[] = [
-             { id: 'acc_bca_h', name: 'BCA Utama', group: 'Bank Accounts', balance: 5000000, currency: 'IDR', includeInTotals: true, owner: 'Husband', description: 'Salary Account' },
-             { id: 'acc_mandiri_w', name: 'Mandiri Istri', group: 'Bank Accounts', balance: 3000000, currency: 'IDR', includeInTotals: true, owner: 'Wife', description: 'Personal Account' },
-             { id: 'acc_cash_h', name: 'Dompet Suami', group: 'Cash', balance: 500000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
-             { id: 'acc_cash_w', name: 'Dompet Istri', group: 'Cash', balance: 500000, currency: 'IDR', includeInTotals: true, owner: 'Wife' },
-             { id: 'acc_cc', name: 'BCA Credit Card', group: 'Credit Cards', balance: -2000000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
-             { id: 'acc_invest', name: 'Bibit / Stock', group: 'Investments', balance: 10000000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
-             { id: 'acc_gold', name: 'Emas Antam', group: 'Investments', balance: 0, currency: 'IDR', includeInTotals: true, owner: 'Wife', metadata: { grams: 0 } },
+        // --- INITIAL DEMO DATA (INTEGRATED & VARIED) ---
+        
+        const demoAccounts: Account[] = [
+             // HUSBAND ACCOUNTS
+             { id: 'acc_bca_h', name: 'BCA Suami (Payroll)', group: 'Bank Accounts', balance: 35000000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
+             { id: 'acc_jenius_h', name: 'Jenius Saver', group: 'Bank Accounts', balance: 15500000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
+             { id: 'acc_stock_h', name: 'Ajaib Saham (BBCA/TLKM)', group: 'Investments', balance: 120000000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
+             { id: 'acc_sbn_h', name: 'SBN Ritel (ORI023)', group: 'Investments', balance: 50000000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
+             { id: 'acc_cc_bca', name: 'BCA Credit Card', group: 'Credit Cards', balance: -4200000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
+
+             // WIFE ACCOUNTS
+             { id: 'acc_mandiri_w', name: 'Mandiri Istri', group: 'Bank Accounts', balance: 18500000, currency: 'IDR', includeInTotals: true, owner: 'Wife' },
+             { id: 'acc_seabank_w', name: 'Seabank (Bunga Harian)', group: 'Bank Accounts', balance: 22000000, currency: 'IDR', includeInTotals: true, owner: 'Wife' },
+             { id: 'acc_bibit_w', name: 'Bibit Reksadana', group: 'Investments', balance: 65000000, currency: 'IDR', includeInTotals: true, owner: 'Wife' },
+             { id: 'acc_gold_w', name: 'Logam Mulia (Antam)', group: 'Investments', balance: 0, currency: 'IDR', includeInTotals: true, owner: 'Wife', metadata: { grams: 50 } },
+
+             // JOINT / CASH
+             { id: 'acc_cash_joint', name: 'Uang Tunai Rumah', group: 'Cash', balance: 3200000, currency: 'IDR', includeInTotals: true, owner: 'Husband' },
         ];
-        setAccounts(accs);
+
+        // Helper date generator
+        const d = (daysAgo: number) => subDays(new Date(), daysAgo).toISOString();
+
+        const demoTransactions: Transaction[] = [
+            // --- TODAY / YESTERDAY (Small Flow) ---
+            { id: 'tx_01', date: d(0), type: 'EXPENSE', amount: 145000, accountId: 'acc_cash_joint', category: 'Food & Drink', notes: 'Makan Keluarga Resto Padang' },
+            { id: 'tx_02', date: d(0), type: 'INCOME', amount: 450000, accountId: 'acc_seabank_w', category: 'Other', notes: 'Jual Barang Preloved' },
+            { id: 'tx_03', date: d(1), type: 'EXPENSE', amount: 3250000, accountId: 'acc_bca_h', category: 'Groceries', notes: 'Belanja Bulanan Besar (Superindo)' },
+            
+            // --- THIS MONTH (Major Flows) ---
+            { id: 'tx_04', date: d(3), type: 'INCOME', amount: 32000000, accountId: 'acc_bca_h', category: 'Salary', notes: 'Gaji Bulanan Suami' },
+            { id: 'tx_05', date: d(5), type: 'TRANSFER', amount: 15000000, accountId: 'acc_bca_h', toAccountId: 'acc_stock_h', category: 'Transfer', notes: 'Topup RDN Ajaib' },
+            { id: 'tx_06', date: d(6), type: 'EXPENSE', amount: 8500000, accountId: 'acc_bca_h', category: 'Education', notes: 'Bayar Uang Gedung Sekolah' },
+            { id: 'tx_07', date: d(7), type: 'INCOME', amount: 18500000, accountId: 'acc_mandiri_w', category: 'Salary', notes: 'Project Freelance Design (Termin Akhir)' },
+            { id: 'tx_08', date: d(8), type: 'TRANSFER', amount: 5000000, accountId: 'acc_mandiri_w', toAccountId: 'acc_seabank_w', category: 'Transfer', notes: 'Pindah Dana Darurat' },
+
+            // --- LAST MONTH (Historical Data for Charts) ---
+            { id: 'tx_09', date: d(30), type: 'INCOME', amount: 32000000, accountId: 'acc_bca_h', category: 'Salary', notes: 'Gaji Bulanan Suami' },
+            { id: 'tx_10', date: d(32), type: 'EXPENSE', amount: 4500000, accountId: 'acc_cc_bca', category: 'Transport', notes: 'Servis Besar Mobil' },
+            { id: 'tx_11', date: d(35), type: 'EXPENSE', amount: 12000000, accountId: 'acc_bca_h', category: 'Entertainment', notes: 'Liburan Keluarga Bali' },
+            { id: 'tx_12', date: d(35), type: 'INCOME', amount: 12500000, accountId: 'acc_mandiri_w', category: 'Salary', notes: 'Project Freelance (DP)' },
+
+            // --- 2 MONTHS AGO (More History) ---
+            { id: 'tx_13', date: d(60), type: 'INCOME', amount: 55000000, accountId: 'acc_bca_h', category: 'Salary', notes: 'Bonus Tahunan Kantor' },
+            { id: 'tx_14', date: d(62), type: 'TRANSFER', amount: 40000000, accountId: 'acc_bca_h', toAccountId: 'acc_sbn_h', category: 'Transfer', notes: 'Beli SBN ORI023' },
+            { id: 'tx_15', date: d(65), type: 'EXPENSE', amount: 25000000, accountId: 'acc_bca_h', category: 'Utilities', notes: 'Renovasi Dapur' },
+        ];
+
+        const demoHajjAcc: NonProfitAccount[] = [
+            { id: 'np_hajj_h', name: 'Tabungan Haji Suami', owner: 'Husband', balance: 35000000, target: 50000000 },
+            { id: 'np_umrah_w', name: 'Tabungan Umrah Istri', owner: 'Wife', balance: 15000000, target: 35000000 }
+        ];
+
+        const demoHajjTx: NonProfitTransaction[] = [
+            { id: 'np_tx_1', date: d(120), amount: 25000000, accountId: 'np_hajj_h', notes: 'Setoran Awal Porsi Haji' },
+            { id: 'np_tx_2', date: d(30), amount: 10000000, accountId: 'np_hajj_h', notes: 'Topup Tahunan' },
+            { id: 'np_tx_3', date: d(15), amount: 15000000, accountId: 'np_umrah_w', notes: 'Deposito Awal Umrah' }
+        ];
+
+        setAccounts(demoAccounts);
+        setTransactions(demoTransactions);
+        setNonProfitAccounts(demoHajjAcc);
+        setNonProfitTransactions(demoHajjTx);
     }
     
     // CRITICAL: Mark data as loaded so we don't overwrite LS with empty state
