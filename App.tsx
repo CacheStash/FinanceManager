@@ -8,8 +8,10 @@ import AssetAnalytics, { AnalyticsScope } from './components/AssetAnalytics';
 import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
-import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2 } from 'lucide-react';
+import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle } from 'lucide-react';
 import { subYears, addDays, getDate, getMonth, isSaturday, isSunday, format } from 'date-fns';
+import { auth, googleProvider } from './services/firebase';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 
 const ACCENT_PRESETS = [
     { name: 'Emerald', value: '#10b981' },
@@ -31,6 +33,7 @@ const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 
 const App = () => {
   const [activeTab, setActiveTab] = useState('trans');
   const [isLoading, setIsLoading] = useState(false); // Global Loading State
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // CRITICAL: Prevent saving empty data before load
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -114,7 +117,7 @@ const App = () => {
     }
   }, [currentAccent, customAccentHex, currentTheme, customBgHex]);
 
-  // Load Data
+  // --- 1. LOAD DATA EFFECT (Run Once) ---
   useEffect(() => {
     const saved = localStorage.getItem('financeProData');
     if (saved) {
@@ -126,7 +129,10 @@ const App = () => {
         setNonProfitTransactions(data.nonProfitTransactions || []);
         setCategories(data.categories || DEFAULT_CATEGORIES);
         setLang(data.lang || 'en');
+        
+        // Handle User Session from LocalStorage (Fallback if Firebase not used)
         if(data.user) setUser(data.user);
+
         if(data.theme) {
             setCurrentAccent(data.theme.accent || 'Emerald');
             setCustomAccentHex(data.theme.customAccent || '#10b981');
@@ -135,7 +141,7 @@ const App = () => {
         }
       } catch (e) { console.error("Failed to load data", e); }
     } else {
-        // Initial Dummy Data
+        // Initial Dummy Data (Only if LocalStorage is empty)
         const accs: Account[] = [
              { id: 'acc_bca_h', name: 'BCA Utama', group: 'Bank Accounts', balance: 5000000, currency: 'IDR', includeInTotals: true, owner: 'Husband', description: 'Salary Account' },
              { id: 'acc_mandiri_w', name: 'Mandiri Istri', group: 'Bank Accounts', balance: 3000000, currency: 'IDR', includeInTotals: true, owner: 'Wife', description: 'Personal Account' },
@@ -147,18 +153,61 @@ const App = () => {
         ];
         setAccounts(accs);
     }
+    
+    // CRITICAL: Mark data as loaded so we don't overwrite LS with empty state
+    setIsDataLoaded(true);
   }, []);
 
-  // Save Data
+  // --- 2. SAVE DATA EFFECT (Runs on change, but blocked if !isDataLoaded) ---
   useEffect(() => {
+     if (!isDataLoaded) return; // Prevent overwriting data during initial load
+
      localStorage.setItem('financeProData', JSON.stringify({
          accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user,
          theme: { accent: currentAccent, customAccent: customAccentHex, bg: currentTheme, customBg: customBgHex }
      }));
-  }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex]);
+  }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
+
+  // --- FIREBASE AUTH SYNC ---
+  useEffect(() => {
+    if (auth) {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                // User is signed in
+                setUser({ 
+                    name: firebaseUser.displayName || firebaseUser.email || 'User', 
+                    email: firebaseUser.email || '' 
+                });
+            } else {
+                // User is signed out, but we might want to keep local session if manual
+                // For now, let's strictly follow firebase state if it was initiated
+                // setUser(null); // Optional: Uncomment to force logout when firebase session ends
+            }
+        });
+        return () => unsubscribe();
+    }
+  }, []);
 
   // --- AUTH HANDLERS ---
-  const handleLocalLogin = () => {
+  const handleLocalLogin = async () => {
+      setAuthError('');
+      
+      // Try Firebase First
+      if (auth) {
+          try {
+              const userCredential = await signInWithEmailAndPassword(auth, regEmail, regPass);
+              const u = userCredential.user;
+              setUser({ name: u.displayName || u.email || 'User', email: u.email || '' });
+              setShowAuthModal(false);
+              setRegEmail(''); setRegPass('');
+              return;
+          } catch (error: any) {
+              console.log("Firebase Login Failed, trying local:", error.message);
+              // Fallthrough to Local Storage check
+          }
+      }
+
+      // Local Storage Fallback
       const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
       const found = storedUsers.find((u: any) => u.email === regEmail && u.password === regPass);
       
@@ -168,18 +217,36 @@ const App = () => {
           setAuthError('');
           setRegEmail(''); setRegPass('');
       } else {
-          setAuthError('Invalid email or password.');
+          setAuthError('Invalid email or password (Local & Cloud failed).');
       }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
       if(!regName || !regEmail || !regPass) {
           setAuthError('All fields are required.');
           return;
       }
+      setAuthError('');
+
+      // Try Firebase Registration
+      if (auth) {
+          try {
+             await createUserWithEmailAndPassword(auth, regEmail, regPass);
+             // Note: Updating display name in Firebase requires another call, skipping for brevity
+             setUser({ name: regName, email: regEmail });
+             setShowAuthModal(false);
+             setRegEmail(''); setRegPass(''); setRegName('');
+             return;
+          } catch (error: any) {
+             setAuthError(error.message);
+             return;
+          }
+      }
+
+      // Local Storage Fallback
       const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
       if (storedUsers.find((u: any) => u.email === regEmail)) {
-          setAuthError('Email already registered.');
+          setAuthError('Email already registered locally.');
           return;
       }
       
@@ -192,14 +259,27 @@ const App = () => {
       setRegEmail(''); setRegPass(''); setRegName('');
   };
 
-  const handleGoogleLogin = () => {
-      setTimeout(() => {
-          setUser({ name: 'Google User', email: 'user@gmail.com' });
+  const handleGoogleLogin = async () => {
+      if (!auth || !googleProvider) {
+          setAuthError('Google Login is not configured. Please add Firebase keys in services/firebase.ts');
+          return;
+      }
+
+      try {
+          const result = await signInWithPopup(auth, googleProvider);
+          const u = result.user;
+          setUser({ name: u.displayName || 'Google User', email: u.email || '' });
           setShowAuthModal(false);
-      }, 500);
+      } catch (error: any) {
+          console.error(error);
+          setAuthError('Google Login Failed: ' + error.message);
+      }
   };
   
-  const handleLogout = () => setUser(null);
+  const handleLogout = () => {
+      if (auth) signOut(auth);
+      setUser(null);
+  };
 
   // --- IMPORT / EXPORT HANDLERS ---
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1067,8 +1147,11 @@ const App = () => {
                     </p>
                     
                     {authError && (
-                        <div className="bg-red-500/10 text-red-400 text-xs p-3 rounded-lg mb-4 border border-red-500/20">
-                            {authError}
+                        <div className="bg-red-500/10 text-red-400 text-xs p-3 rounded-lg mb-4 border border-red-500/20 text-left">
+                            <div className="flex gap-2 items-start">
+                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                <span>{authError}</span>
+                            </div>
                         </div>
                     )}
 
