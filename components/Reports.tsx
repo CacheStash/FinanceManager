@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { 
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, 
-  isWithinInterval, parseISO, format, subDays, differenceInDays, isSameDay 
+  isWithinInterval, parseISO, format, differenceInDays, addWeeks, subWeeks, 
+  addMonths, subMonths, addYears, subYears
 } from 'date-fns';
-import { Calendar, Filter, ChevronDown, UserCircle2, Users } from 'lucide-react';
+import { Calendar, UserCircle2, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ReportsProps {
   transactions: Transaction[];
@@ -20,8 +21,15 @@ type RangeType = 'WEEK' | 'MONTH' | 'YEAR' | 'ALL' | 'CUSTOM';
 const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }) => {
   const [range, setRange] = useState<RangeType>('MONTH');
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
+  const [cursorDate, setCursorDate] = useState(new Date());
+
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+
+  // Reset cursor on range change
+  useEffect(() => {
+    setCursorDate(new Date());
+  }, [range]);
 
   // Translations helper
   const t = (key: string) => {
@@ -38,27 +46,26 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
     return dict[key] || key;
   };
 
-  // --- 1. Filter Transactions based on Range AND Owner ---
-  const { filteredTransactions, dateLabel } = useMemo(() => {
-    const now = new Date();
+  // --- 1. Filter Transactions based on Range AND Owner AND Cursor ---
+  const { filteredTransactions, dateLabel, start, end } = useMemo(() => {
     let start: Date, end: Date;
     let label = '';
 
     switch (range) {
       case 'WEEK':
-        start = startOfWeek(now, { weekStartsOn: 1 }); // Monday start
-        end = endOfWeek(now, { weekStartsOn: 1 });
-        label = 'This Week';
+        start = startOfWeek(cursorDate, { weekStartsOn: 1 }); // Monday start
+        end = endOfWeek(cursorDate, { weekStartsOn: 1 });
+        label = `${format(start, 'd MMM')} - ${format(end, 'd MMM yyyy')}`;
         break;
       case 'MONTH':
-        start = startOfMonth(now);
-        end = endOfMonth(now);
-        label = format(now, 'MMMM yyyy');
+        start = startOfMonth(cursorDate);
+        end = endOfMonth(cursorDate);
+        label = format(cursorDate, 'MMMM yyyy');
         break;
       case 'YEAR':
-        start = startOfYear(now);
-        end = endOfYear(now);
-        label = format(now, 'yyyy');
+        start = startOfYear(cursorDate);
+        end = endOfYear(cursorDate);
+        label = format(cursorDate, 'yyyy');
         break;
       case 'ALL':
         start = new Date(0); // Epoch
@@ -68,13 +75,13 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
       case 'CUSTOM':
         start = new Date(customStart);
         end = new Date(customEnd);
-        // Fix for end date being at 00:00:00, set it to end of day
         end.setHours(23, 59, 59, 999);
         label = `${format(start, 'dd MMM')} - ${format(end, 'dd MMM yyyy')}`;
         break;
       default:
-        start = startOfMonth(now);
-        end = endOfMonth(now);
+        start = startOfMonth(cursorDate);
+        end = endOfMonth(cursorDate);
+        label = format(cursorDate, 'MMMM yyyy');
     }
 
     const filtered = transactions.filter(t => {
@@ -90,9 +97,24 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
     });
 
     return { filteredTransactions: filtered, dateLabel: label, start, end };
-  }, [range, ownerFilter, transactions, accounts, customStart, customEnd]);
+  }, [range, ownerFilter, transactions, accounts, customStart, customEnd, cursorDate]);
 
-  // --- 2. Calculate Totals for Header ---
+  // --- 2. Navigation Handlers ---
+  const handlePrev = () => {
+    if (range === 'WEEK') setCursorDate(d => subWeeks(d, 1));
+    if (range === 'MONTH') setCursorDate(d => subMonths(d, 1));
+    if (range === 'YEAR') setCursorDate(d => subYears(d, 1));
+  };
+
+  const handleNext = () => {
+    if (range === 'WEEK') setCursorDate(d => addWeeks(d, 1));
+    if (range === 'MONTH') setCursorDate(d => addMonths(d, 1));
+    if (range === 'YEAR') setCursorDate(d => addYears(d, 1));
+  };
+
+  const showSlider = range !== 'ALL' && range !== 'CUSTOM';
+
+  // --- 3. Calculate Totals for Header ---
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
@@ -103,7 +125,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
     return { income, expense, net: income - expense };
   }, [filteredTransactions]);
 
-  // --- 3. Category Breakdown (Pie Chart) ---
+  // --- 4. Category Breakdown (Pie Chart) ---
   const categoryData = useMemo(() => {
     const expenses = filteredTransactions.filter(t => t.type === 'EXPENSE');
     const categories: Record<string, number> = {};
@@ -116,7 +138,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
     })).sort((a, b) => b.value - a.value);
   }, [filteredTransactions]);
 
-  // --- 4. Cashflow (Bar Chart) - Dynamic Grouping ---
+  // --- 5. Cashflow (Bar Chart) - Dynamic Grouping ---
   const cashflowData = useMemo(() => {
     const data: Record<string, { income: number, expense: number, sortDate: number }> = {};
     
@@ -135,7 +157,6 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
 
       if (isDaily) {
         key = format(date, 'd MMM'); // "12 Jan"
-        // Normalize to midnight for correct sorting
         const d = new Date(date); d.setHours(0,0,0,0);
         sortDate = d.getTime();
       } else {
@@ -188,6 +209,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
             </div>
         </div>
 
+        {/* Range Buttons */}
         <div className="flex flex-wrap gap-2 mb-4 justify-center md:justify-start">
           {(['WEEK', 'MONTH', 'YEAR', 'ALL', 'CUSTOM'] as RangeType[]).map((r) => (
             <button
@@ -204,6 +226,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
           ))}
         </div>
 
+        {/* Custom Range Inputs */}
         {range === 'CUSTOM' && (
           <div className="flex items-center gap-2 mb-4 bg-white/5 p-2 rounded-lg animate-in slide-in-from-top-2">
             <input 
@@ -222,14 +245,26 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-2">
-          <h2 className="text-sm font-medium text-gray-400 flex items-center gap-2">
-             <Calendar className="w-4 h-4" />
-             {dateLabel}
-          </h2>
-          <div className={`text-sm font-bold ${totals.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {totals.net >= 0 ? '+' : ''}{formatCurrency(totals.net)}
-          </div>
+        {/* Navigation Slider */}
+        {showSlider && (
+            <div className="flex items-center justify-between bg-white/5 rounded-xl px-2 py-1.5 mb-3 animate-in slide-in-from-top-1">
+                <button onClick={handlePrev} className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors">
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="flex items-center gap-2 font-bold text-white text-sm select-none">
+                     <Calendar className="w-4 h-4 text-gray-400" />
+                     {dateLabel}
+                </div>
+                <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors">
+                    <ChevronRight className="w-5 h-5" />
+                </button>
+            </div>
+        )}
+
+        {/* Total Summary */}
+        <div className={`text-center py-1 rounded-lg ${totals.net >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+            <span className="text-xs uppercase font-bold mr-2">Net Period:</span>
+            <span className="font-bold">{totals.net >= 0 ? '+' : ''}{formatCurrency(totals.net)}</span>
         </div>
       </div>
 
@@ -247,9 +282,9 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* --- CATEGORY BREAKDOWN --- */}
-        <div className="bg-surface p-6 rounded-2xl shadow-sm border border-white/10 min-h-[350px] flex flex-col">
-          <h3 className="text-lg font-bold text-white mb-2">{t('Breakdown')}</h3>
-          <div className="flex-1 min-h-[250px]">
+        <div className="bg-surface p-6 rounded-2xl shadow-sm border border-white/10 flex flex-col">
+          <h3 className="text-lg font-bold text-white mb-4">{t('Breakdown')}</h3>
+          <div className="h-[300px] w-full">
               {categoryData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -284,9 +319,9 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
         </div>
 
         {/* --- CASHFLOW CHART --- */}
-        <div className="bg-surface p-6 rounded-2xl shadow-sm border border-white/10 min-h-[350px] flex flex-col">
-          <h3 className="text-lg font-bold text-white mb-2">{t('Cashflow')}</h3>
-          <div className="flex-1 min-h-[250px]">
+        <div className="bg-surface p-6 rounded-2xl shadow-sm border border-white/10 flex flex-col">
+          <h3 className="text-lg font-bold text-white mb-4">{t('Cashflow')}</h3>
+          <div className="h-[300px] w-full">
              {cashflowData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={cashflowData}>

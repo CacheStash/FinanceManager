@@ -1,7 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction } from '../types';
-import { ArrowLeft, BarChart3, Edit2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowDownRight, ArrowUpRight, ArrowRightLeft } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, parseISO } from 'date-fns';
+import { ArrowLeft, BarChart3, Edit2, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { 
+    format, addDays, subDays, addMonths, subMonths, addYears, subYears,
+    isSameDay, isSameMonth, isSameYear, startOfYear, endOfYear, startOfMonth, endOfMonth,
+    parseISO
+} from 'date-fns';
 
 interface AccountDetailProps {
   account: Account;
@@ -11,8 +15,16 @@ interface AccountDetailProps {
   onViewStats: (account: Account) => void;
 }
 
+type ViewMode = 'DAILY' | 'MONTHLY' | 'ANNUALLY';
+
 const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, onBack, onEdit, onViewStats }) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>('MONTHLY');
+  const [cursorDate, setCursorDate] = useState(new Date());
+
+  // Reset cursor when account changes
+  useEffect(() => {
+      setCursorDate(new Date());
+  }, [account.id]);
 
   // --- 1. Calculate Running Balance & Process Transactions ---
   const processedData = useMemo(() => {
@@ -21,73 +33,84 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
         t.accountId === account.id || t.toAccountId === account.id
     ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort Newest First
 
-    // B. Calculate Running Balance (Reverse Engineering from Current Balance)
-    // We start from current account balance and work backwards through the sorted transactions.
+    // B. Calculate Running Balance (Reverse Engineering)
     let currentBalance = account.balance;
     
-    const withRunningBalance = accountTx.map(tx => {
+    return accountTx.map(tx => {
         const txDate = new Date(tx.date);
         const isTransferOut = tx.type === 'TRANSFER' && tx.accountId === account.id;
         const isTransferIn = tx.type === 'TRANSFER' && tx.toAccountId === account.id;
         
-        // Determine the "Impact" of this transaction on the balance
         let amountEffect = 0;
+        if (tx.type === 'INCOME') amountEffect = tx.amount;
+        else if (tx.type === 'EXPENSE') amountEffect = -tx.amount;
+        else if (isTransferOut) amountEffect = -(tx.amount + (tx.fees || 0));
+        else if (isTransferIn) amountEffect = tx.amount;
 
-        if (tx.type === 'INCOME') {
-            amountEffect = tx.amount;
-        } else if (tx.type === 'EXPENSE') {
-            amountEffect = -tx.amount;
-        } else if (isTransferOut) {
-            amountEffect = -(tx.amount + (tx.fees || 0));
-        } else if (isTransferIn) {
-            amountEffect = tx.amount;
-        }
-
-        // Snapshot balance AFTER this transaction occurred
         const balanceAfter = currentBalance;
-
-        // Revert balance to state BEFORE this transaction for the next iteration
         currentBalance = currentBalance - amountEffect;
 
-        return {
-            ...tx,
-            balanceAfter,
-            amountEffect,
-            dateObj: txDate
-        };
+        return { ...tx, balanceAfter, amountEffect, dateObj: txDate };
     });
-
-    return withRunningBalance;
   }, [account, transactions]);
 
-  // --- 2. Filter by Selected Month ---
-  const monthlyData = useMemo(() => {
-    return processedData.filter(tx => isSameMonth(tx.dateObj, currentMonth));
-  }, [processedData, currentMonth]);
+  // --- 2. Filter Data based on View Mode & Cursor ---
+  const filteredData = useMemo(() => {
+    return processedData.filter(tx => {
+        if (viewMode === 'DAILY') return isSameDay(tx.dateObj, cursorDate);
+        if (viewMode === 'MONTHLY') return isSameMonth(tx.dateObj, cursorDate);
+        if (viewMode === 'ANNUALLY') return isSameYear(tx.dateObj, cursorDate);
+        return false;
+    });
+  }, [processedData, viewMode, cursorDate]);
 
-  // --- 3. Calculate Monthly Summaries ---
+  // --- 3. Calculate Summaries ---
   const summary = useMemo(() => {
     let income = 0;
     let expense = 0;
     
-    monthlyData.forEach(tx => {
+    filteredData.forEach(tx => {
         if (tx.amountEffect > 0) income += tx.amountEffect;
         else expense += Math.abs(tx.amountEffect);
     });
 
     return { income, expense, total: income - expense };
-  }, [monthlyData]);
+  }, [filteredData]);
 
-  // --- 4. Group by Date for Display ---
+  // --- 4. Grouping Logic ---
   const groupedTransactions = useMemo(() => {
-      const groups: Record<string, typeof monthlyData> = {};
-      monthlyData.forEach(tx => {
-          const dateKey = format(tx.dateObj, 'yyyy-MM-dd');
+      const groups: Record<string, typeof filteredData> = {};
+      filteredData.forEach(tx => {
+          // If Annually, group by Month. If Monthly/Daily, group by Day.
+          const dateKey = viewMode === 'ANNUALLY' 
+            ? format(tx.dateObj, 'yyyy-MM') 
+            : format(tx.dateObj, 'yyyy-MM-dd');
+          
           if (!groups[dateKey]) groups[dateKey] = [];
           groups[dateKey].push(tx);
       });
       return groups;
-  }, [monthlyData]);
+  }, [filteredData, viewMode]);
+
+  // --- 5. Navigation Handlers ---
+  const handlePrev = () => {
+      if (viewMode === 'DAILY') setCursorDate(d => subDays(d, 1));
+      if (viewMode === 'MONTHLY') setCursorDate(d => subMonths(d, 1));
+      if (viewMode === 'ANNUALLY') setCursorDate(d => subYears(d, 1));
+  };
+
+  const handleNext = () => {
+      if (viewMode === 'DAILY') setCursorDate(d => addDays(d, 1));
+      if (viewMode === 'MONTHLY') setCursorDate(d => addMonths(d, 1));
+      if (viewMode === 'ANNUALLY') setCursorDate(d => addYears(d, 1));
+  };
+
+  const getDisplayLabel = () => {
+      if (viewMode === 'DAILY') return format(cursorDate, 'dd MMM yyyy');
+      if (viewMode === 'MONTHLY') return format(cursorDate, 'MMMM yyyy');
+      if (viewMode === 'ANNUALLY') return format(cursorDate, 'yyyy');
+      return '';
+  };
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: account.currency || 'IDR', maximumFractionDigits: 0 }).format(val);
@@ -95,7 +118,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
       {/* --- HEADER --- */}
-      <div className="bg-surface border-b border-white/10 sticky top-0 z-20">
+      <div className="bg-surface border-b border-white/10 sticky top-0 z-20 shadow-lg">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-gray-300">
@@ -117,40 +140,52 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
             </div>
           </div>
 
-          {/* --- MONTH NAVIGATOR --- */}
-          <div className="flex items-center justify-between px-4 pb-2">
-             <button onClick={() => setCurrentMonth(prev => subMonths(prev, 1))} className="p-1 hover:bg-white/10 rounded-full text-gray-400"><ChevronLeft className="w-6 h-6"/></button>
-             <span className="text-white font-medium text-lg">{format(currentMonth, 'MMM yyyy')}</span>
-             <button onClick={() => setCurrentMonth(prev => addMonths(prev, 1))} className="p-1 hover:bg-white/10 rounded-full text-gray-400"><ChevronRight className="w-6 h-6"/></button>
+          {/* --- TABS --- */}
+          <div className="grid grid-cols-3 px-4 mb-3 gap-1">
+              {(['DAILY', 'MONTHLY', 'ANNUALLY'] as ViewMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`text-xs font-bold py-2 rounded-lg transition-colors ${
+                        viewMode === mode 
+                        ? 'bg-white/10 text-primary' 
+                        : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                      {mode === 'ANNUALLY' ? 'Yearly' : mode.charAt(0) + mode.slice(1).toLowerCase()}
+                  </button>
+              ))}
           </div>
 
-          {/* --- TABS (Visual Only) --- */}
-          <div className="flex px-4 mt-2">
-              <div className="flex-1 border-b-2 border-primary text-primary text-center pb-2 text-sm font-bold">Daily</div>
-              <div className="flex-1 border-b-2 border-transparent text-gray-500 text-center pb-2 text-sm font-medium">Monthly</div>
-              <div className="flex-1 border-b-2 border-transparent text-gray-500 text-center pb-2 text-sm font-medium">Annually</div>
+          {/* --- NAVIGATOR SLIDER --- */}
+          <div className="flex items-center justify-between px-4 pb-4">
+             <button onClick={handlePrev} className="p-1 hover:bg-white/10 rounded-full text-gray-400 transition-colors"><ChevronLeft className="w-6 h-6"/></button>
+             <span className="text-white font-bold text-lg select-none">{getDisplayLabel()}</span>
+             <button onClick={handleNext} className="p-1 hover:bg-white/10 rounded-full text-gray-400 transition-colors"><ChevronRight className="w-6 h-6"/></button>
           </div>
 
           {/* --- SUMMARY ROW --- */}
           <div className="grid grid-cols-4 gap-2 p-3 bg-[#27272a] text-xs border-b border-white/10">
               <div className="text-center">
-                  <div className="text-gray-400 mb-1">Deposit</div>
+                  <div className="text-gray-400 mb-1">In</div>
                   <div className="text-blue-400 font-bold truncate">{formatCurrency(summary.income)}</div>
               </div>
               <div className="text-center">
-                  <div className="text-gray-400 mb-1">Withdrawal</div>
+                  <div className="text-gray-400 mb-1">Out</div>
                   <div className="text-red-400 font-bold truncate">{formatCurrency(summary.expense)}</div>
               </div>
               <div className="text-center">
-                  <div className="text-gray-400 mb-1">Total</div>
-                  <div className={`${summary.total >= 0 ? 'text-white' : 'text-red-400'} font-bold truncate`}>{formatCurrency(summary.total)}</div>
+                  <div className="text-gray-400 mb-1">Change</div>
+                  <div className={`${summary.total >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold truncate`}>
+                      {summary.total > 0 ? '+' : ''}{formatCurrency(summary.total)}
+                  </div>
               </div>
               <div className="text-center">
                   <div className="text-gray-400 mb-1">End Balance</div>
-                  {/* Show balance of the last transaction of this month, or carry over if no tx this month */}
+                  {/* Show latest balance of period, or fallback */}
                   <div className="text-gray-200 font-bold truncate">
-                      {monthlyData.length > 0 
-                        ? formatCurrency(monthlyData[0].balanceAfter) 
+                      {filteredData.length > 0 
+                        ? formatCurrency(filteredData[0].balanceAfter) 
                         : '-' 
                       }
                   </div>
@@ -163,24 +198,32 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
         {Object.keys(groupedTransactions).length === 0 ? (
             <div className="p-10 flex flex-col items-center justify-center text-gray-500 opacity-50">
                 <CalendarIcon className="w-12 h-12 mb-2" />
-                <p>No transactions in {format(currentMonth, 'MMMM')}</p>
+                <p>No transactions found</p>
+                <p className="text-xs mt-1">{getDisplayLabel()}</p>
             </div>
         ) : (
             Object.keys(groupedTransactions).sort((a,b) => new Date(b).getTime() - new Date(a).getTime()).map(dateKey => {
                 const dayTx = groupedTransactions[dateKey];
+                // Group totals
                 const dayIncome = dayTx.reduce((sum, t) => t.amountEffect > 0 ? sum + t.amountEffect : sum, 0);
                 const dayExpense = dayTx.reduce((sum, t) => t.amountEffect < 0 ? sum + Math.abs(t.amountEffect) : sum, 0);
+                
+                // Date formatting for group header
+                const dateObj = viewMode === 'ANNUALLY' ? parseISO(dateKey + '-01') : parseISO(dateKey);
+                const dayLabel = viewMode === 'ANNUALLY' ? format(dateObj, 'MMMM yyyy') : format(dateObj, 'dd');
+                const subLabel = viewMode === 'ANNUALLY' ? '' : format(dateObj, 'EEE, MMM yyyy');
 
                 return (
                     <div key={dateKey}>
-                        {/* DATE HEADER */}
+                        {/* GROUP HEADER */}
                         <div className="bg-[#18181b] px-4 py-2 flex justify-between items-center border-b border-white/5">
                             <div className="flex items-center gap-2">
-                                <span className="text-xl font-bold text-white">{format(parseISO(dateKey), 'dd')}</span>
-                                <div className="flex flex-col leading-none">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase">{format(parseISO(dateKey), 'EEE')}</span>
-                                    <span className="text-[10px] text-gray-500">{format(parseISO(dateKey), 'MM/yyyy')}</span>
-                                </div>
+                                <span className="text-xl font-bold text-white">{dayLabel}</span>
+                                {subLabel && (
+                                    <div className="flex flex-col leading-none">
+                                        <span className="text-[10px] text-gray-500 font-medium uppercase">{subLabel}</span>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex gap-4 text-xs">
                                 {dayIncome > 0 && <span className="text-blue-400">{formatCurrency(dayIncome)}</span>}
@@ -190,7 +233,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
 
                         {/* ROWS */}
                         {dayTx.map(tx => (
-                            <div key={tx.id} className="px-4 py-3 bg-surface border-b border-white/5 flex justify-between items-center">
+                            <div key={tx.id} className="px-4 py-3 bg-surface border-b border-white/5 flex justify-between items-center hover:bg-white/5 transition-colors">
                                 <div className="flex flex-col gap-1 overflow-hidden">
                                     <span className="text-sm font-medium text-gray-200 truncate pr-2">{tx.category || tx.type}</span>
                                     {tx.notes && <span className="text-xs text-gray-500 truncate">{tx.notes}</span>}
@@ -203,7 +246,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                                         {formatCurrency(tx.amountEffect)}
                                     </div>
                                     <div className="text-[10px] text-gray-500 mt-0.5">
-                                        Balance {formatCurrency(tx.balanceAfter)}
+                                        {formatCurrency(tx.balanceAfter)}
                                     </div>
                                 </div>
                             </div>

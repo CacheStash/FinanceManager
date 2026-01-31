@@ -1,5 +1,5 @@
 {
-  "name": "Finance Manager Pro",
-  "description": "Offline personal finance tracker with multi-account management, detailed statistics, and calendar views.",
+  "name": "Finance Manager Pro (Offline)",
+  "description": "100% Offline personal finance tracker. No API keys required. Data stays on your device.",
   "requestFramePermissions": []
 }

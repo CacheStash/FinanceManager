@@ -1,1 +1,3 @@
-// This file is deprecated and intentionally left empty to remove AI functionality.
+// AI FEATURES REMOVED
+// This file is intentionally empty. No Google Gemini API keys are required.
+export const geminiService = null;

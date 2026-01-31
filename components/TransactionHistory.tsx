@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, MousePointerClick } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, MousePointerClick, ChevronLeft, ChevronRight } from 'lucide-react';
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
-  isWithinInterval, parseISO 
+  isWithinInterval, parseISO, addDays, subDays, addWeeks, subWeeks, 
+  addMonths, subMonths, addYears, subYears
 } from 'date-fns';
 
 interface TransactionHistoryProps {
@@ -19,12 +20,18 @@ type DateRange = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'LIFETIME' | 'CUSTO
 const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount }) => {
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
   const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
+  const [cursorDate, setCursorDate] = useState(new Date()); // The reference point for navigation
+  
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
+  // Reset cursor when range type changes
+  useEffect(() => {
+      setCursorDate(new Date());
+  }, [dateRange]);
+
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown Account';
   
-  // Helper to get labels based on lang
   const t = (key: string) => {
     const dict: any = {
       'All': lang === 'en' ? 'Joint' : 'Gabungan',
@@ -56,41 +63,49 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
   }
 
-  // --- 1. Filter Logic ---
-  const filteredTransactions = useMemo(() => {
-    const now = new Date();
-    let start: Date, end: Date;
+  // --- 1. Calculate Active Interval based on Cursor ---
+  const { start, end, label } = useMemo(() => {
+    let s: Date, e: Date, l = '';
 
-    // Determine Date Range
     switch (dateRange) {
         case 'DAILY':
-            start = startOfDay(now);
-            end = endOfDay(now);
+            s = startOfDay(cursorDate);
+            e = endOfDay(cursorDate);
+            l = format(cursorDate, 'dd MMMM yyyy');
             break;
         case 'WEEKLY':
-            start = startOfWeek(now, { weekStartsOn: 1 });
-            end = endOfWeek(now, { weekStartsOn: 1 });
+            s = startOfWeek(cursorDate, { weekStartsOn: 1 });
+            e = endOfWeek(cursorDate, { weekStartsOn: 1 });
+            l = `${format(s, 'dd MMM')} - ${format(e, 'dd MMM yyyy')}`;
             break;
         case 'MONTHLY':
-            start = startOfMonth(now);
-            end = endOfMonth(now);
+            s = startOfMonth(cursorDate);
+            e = endOfMonth(cursorDate);
+            l = format(cursorDate, 'MMMM yyyy');
             break;
         case 'YEARLY':
-            start = startOfYear(now);
-            end = endOfYear(now);
+            s = startOfYear(cursorDate);
+            e = endOfYear(cursorDate);
+            l = format(cursorDate, 'yyyy');
             break;
         case 'CUSTOM':
-            start = parseISO(customStart);
-            end = parseISO(customEnd);
-            end.setHours(23, 59, 59, 999);
+            s = parseISO(customStart);
+            e = parseISO(customEnd);
+            e.setHours(23, 59, 59, 999);
+            l = 'Custom Range';
             break;
         case 'LIFETIME':
         default:
-            start = new Date(0);
-            end = new Date(8640000000000000);
+            s = new Date(0);
+            e = new Date(8640000000000000);
+            l = 'Lifetime';
             break;
     }
+    return { start: s, end: e, label: l };
+  }, [dateRange, cursorDate, customStart, customEnd]);
 
+  // --- 2. Filter Logic ---
+  const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
         // A. Owner Filter
         let ownerMatch = true;
@@ -105,9 +120,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
         return ownerMatch && dateMatch;
     });
-  }, [transactions, accounts, ownerFilter, dateRange, customStart, customEnd]);
+  }, [transactions, accounts, ownerFilter, start, end]);
 
-  // --- 2. Calculate Summary ---
+  // --- 3. Calculate Summary ---
   const summary = useMemo(() => {
       let income = 0;
       let expense = 0;
@@ -119,6 +134,23 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
       return { income, expense, net: income - expense };
   }, [filteredTransactions]);
+
+  // --- 4. Navigation Handlers ---
+  const handlePrev = () => {
+      if (dateRange === 'DAILY') setCursorDate(d => subDays(d, 1));
+      if (dateRange === 'WEEKLY') setCursorDate(d => subWeeks(d, 1));
+      if (dateRange === 'MONTHLY') setCursorDate(d => subMonths(d, 1));
+      if (dateRange === 'YEARLY') setCursorDate(d => subYears(d, 1));
+  };
+
+  const handleNext = () => {
+      if (dateRange === 'DAILY') setCursorDate(d => addDays(d, 1));
+      if (dateRange === 'WEEKLY') setCursorDate(d => addWeeks(d, 1));
+      if (dateRange === 'MONTHLY') setCursorDate(d => addMonths(d, 1));
+      if (dateRange === 'YEARLY') setCursorDate(d => addYears(d, 1));
+  };
+
+  const showSlider = dateRange !== 'LIFETIME' && dateRange !== 'CUSTOM';
 
   const handleDoubleClick = (accountId: string) => {
       const acc = accounts.find(a => a.id === accountId);
@@ -135,9 +167,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         <div className="flex justify-between items-center">
              <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 {lang === 'en' ? 'Transactions' : 'Transaksi'}
-                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-gray-400 font-normal hidden md:inline-flex items-center gap-1">
-                    <MousePointerClick className="w-3 h-3"/> Dbl Click to View Account
-                </span>
             </h2>
         </div>
 
@@ -192,6 +221,19 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                 </div>
             )}
         </div>
+
+        {/* NAVIGATION SLIDER (Visible if not Lifetime/Custom) */}
+        {showSlider && (
+            <div className="flex items-center justify-between bg-white/5 rounded-xl px-2 py-1.5 animate-in slide-in-from-top-2">
+                <button onClick={handlePrev} className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors">
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="font-bold text-white text-sm select-none">{label}</span>
+                <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors">
+                    <ChevronRight className="w-5 h-5" />
+                </button>
+            </div>
+        )}
 
         {/* Financial Summary Box */}
         <div className="grid grid-cols-3 gap-2 bg-[#27272a] p-3 rounded-xl border border-white/5">

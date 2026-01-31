@@ -1,26 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-// --- KONFIGURASI SUPABASE ---
-// 1. Buat project baru di https://supabase.com/
-// 2. Masuk ke Project Settings -> API
-// 3. Copy "Project URL" dan "anon public" key
+// Supabase Configuration
+// To enable cloud sync, create a project at https://supabase.com
+// and add your API keys to a .env file or hardcode them here (not recommended for production).
 
-const SUPABASE_URL = 'ISI_DENGAN_SUPABASE_URL_ANDA'; // cth: https://xyz.supabase.co
-const SUPABASE_ANON_KEY = 'ISI_DENGAN_ANON_KEY_ANDA';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || ''; 
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
 
-let supabase: any = null;
-let isSupabaseConfigured = false;
+// We check if keys are present to enable/disable the service logic
+export const isSupabaseConfigured = supabaseUrl && supabaseKey && supabaseUrl.length > 0 && supabaseKey.length > 0;
 
-if (SUPABASE_URL && !SUPABASE_URL.includes('ISI_DENGAN') && SUPABASE_ANON_KEY) {
-    try {
-        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        isSupabaseConfigured = true;
-        console.log("Supabase initialized");
-    } catch (e) {
-        console.error("Supabase init failed", e);
-    }
-} else {
-    console.warn("Supabase belum dikonfigurasi di services/supabase.ts");
-}
-
-export { supabase, isSupabaseConfigured };
+export const supabase = isSupabaseConfigured 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;

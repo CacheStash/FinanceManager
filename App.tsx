@@ -8,12 +8,10 @@ import AssetAnalytics, { AnalyticsScope } from './components/AssetAnalytics';
 import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
-import { Pipette, Palette, User, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, CheckCircle, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Database } from 'lucide-react';
-import { subDays, addDays, getDate, getMonth, isSaturday, isSunday, format, subMonths } from 'date-fns';
+import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle } from 'lucide-react';
+import { subDays, format } from 'date-fns';
 
-// Note: Supabase is prepared in services/supabase.ts but not actively hooked up to auth yet
-// per user request to stick to Local Account only for now.
-// import { supabase, isSupabaseConfigured } from './services/supabase';
+// OFFLINE MODE: No external services imported.
 
 const ACCENT_PRESETS = [
     { name: 'Emerald', value: '#10b981' },
