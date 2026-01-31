@@ -1,0 +1,1 @@
+// This file is deprecated and intentionally left empty to remove AI functionality.
