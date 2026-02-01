@@ -126,50 +126,52 @@ const App = () => {
 
  // ================= MULAI KODE PERBAIKAN =================
 
-  // 1. DEFINISIKAN FUNGSI LOAD DATA DULU (Jangan ada useEffect di dalam sini)
+  // 1. FUNGSI LOAD DATA (OPTIMIZED: PARALLEL REQUESTS)
   const loadDataFromSupabase = async (userId: string) => {
     setIsLoading(true);
 
-    // A. Ambil Akun
-    const { data: accData, error: accError } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('user_id', userId);
+    try {
+        // --- PARALLEL FETCHING ---
+        // Kita "tembak" request Akun, Transaksi, dan Settings secara BERSAMAAN.
+        // Waktu tunggu jadi secepat request terlama, bukan total penjumlahan ketiganya.
+        const [accRes, txRes, settingsRes] = await Promise.all([
+            supabase.from('accounts').select('*').eq('user_id', userId),
+            supabase.from('transactions').select('*').eq('user_id', userId),
+            loadSettingsFromSupabase(userId) // Pastikan fungsi ini async
+        ]);
 
-    // B. Ambil Transaksi
-    const { data: txData, error: txError } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId);
+        const accData = accRes.data;
+        const txData = txRes.data;
 
-    if (accError || txError) {
-        console.error("Gagal ambil data:", accError || txError);
+        if (accRes.error || txRes.error) {
+            console.error("Gagal ambil data:", accRes.error || txRes.error);
+        }
+
+        // C. Masukkan ke State Aplikasi (Batch Update)
+        // React 18+ otomatis melakukan batching, tapi ini tetap good practice
+        if (accData && accData.length > 0) {
+            setAccounts(accData); 
+        }
+
+        if (txData && txData.length > 0) {
+            const mappedTx = txData.map(t => ({
+                ...t,
+                accountId: t.account_id, 
+                toAccountId: t.to_account_id,
+                notes: t.note
+            }));
+            setTransactions(mappedTx);
+        }
+
+    } catch (err) {
+        console.error("Critical Load Error:", err);
+    } finally {
+        setIsDataLoaded(true);
         setIsLoading(false);
-        return;
     }
-
-    // C. Masukkan ke State Aplikasi
-    if (accData && accData.length > 0) {
-        setAccounts(accData); 
-    }
-
-    if (txData && txData.length > 0) {
-        const mappedTx = txData.map(t => ({
-            ...t,
-            accountId: t.account_id, 
-            toAccountId: t.to_account_id,
-            notes: t.note
-        }));
-        setTransactions(mappedTx);
-    }
-    
-// TAMBAHKAN BARIS INI 👇
-await loadSettingsFromSupabase(userId);
-
-    setIsDataLoaded(true);
-    setIsLoading(false);
   };
 
+  
  // 2. USEEFFECT UTAMA (Cek Login & Load Data - DENGAN TIMEOUT PROTECTION)
   useEffect(() => {
     const checkUser = async () => {
