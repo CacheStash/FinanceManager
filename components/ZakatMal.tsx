@@ -255,15 +255,15 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
 
                                 <button 
                                 onClick={() => {
-                                    // LOGIC BARU: Auto select akun pertama yang valid milik owner tersebut
-                                    const validAccount = accounts
+                                    // 1. CARI AKUN OTOMATIS BERDASARKAN OWNER YANG AKTIF
+                                    // Filter: Milik Owner (atau Joint), Tipe Cash/Bank, Urutkan dari saldo terbesar
+                                    const recommendedAccount = accounts
                                         .filter(a => a.owner === selectedOwner || !a.owner)
                                         .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
-                                        // Opsional: Sort by balance tertinggi biar aman
-                                        .sort((a,b) => b.balance - a.balance) 
-                                        [0];
+                                        .sort((a,b) => b.balance - a.balance)[0]; // Ambil yang saldo terbanyak
 
-                                    setPaymentSourceAccountId(validAccount ? validAccount.id : '');
+                                    // 2. Set State
+                                    setPaymentSourceAccountId(recommendedAccount ? recommendedAccount.id : '');
                                     setShowPayModal(true);
                                 }}
                                 className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-yellow-900/20 transition-all active:scale-95"
@@ -271,6 +271,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                 <HandCoins className="w-5 h-5" />
                                 Bayar Zakat Sekarang
                             </button>
+
                             </div>
                         </div>
                     </div>
@@ -296,30 +297,28 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                     </div>
                 )}
 
-                {/* PAY ZAKAT MODAL (UPDATED) */}
+                {/* PAY ZAKAT MODAL (FLOATING CENTER STYLE) */}
                 {showPayModal && (
-                    <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
-                        {/* FIX UI: 
-                           1. max-h-[90vh]: Agar modal tidak melebihi tinggi layar
-                           2. overflow-y-auto: Agar bisa di-scroll jika konten panjang
-                           3. pb-10: Memberi nafas di bagian bawah agar tombol tidak mepet bezel HP 
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+                        {/* STYLE PERBAIKAN:
+                           1. max-w-sm: Ukuran lebar dibatasi (mirip Edit Account)
+                           2. rounded-2xl: Sudut membulat penuh
+                           3. animate-in zoom-in-95: Efek muncul pop-up (bukan slide dari bawah)
                         */}
-                        <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col">
+                        <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 overflow-hidden shadow-2xl animate-in zoom-in-95">
                             
                             {/* Header Modal */}
-                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
+                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b]">
                                 <h3 className="font-bold text-white text-lg">Bayar Zakat Mal</h3>
-                                <button onClick={() => setShowPayModal(false)}><X className="w-6 h-6 text-gray-400" /></button>
+                                <button onClick={() => setShowPayModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
                             </div>
 
-                            {/* Content Modal (Scrollable) */}
-                            <div className="p-6 space-y-5 overflow-y-auto pb-10">
-                                
-                                {/* Info Zakat Type */}
-                                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex justify-between items-center">
-                                    <span className="text-xs text-indigo-300 font-bold uppercase">Zakat Owner</span>
-                                    <div className="flex items-center gap-2 text-indigo-100 font-bold text-sm">
-                                        <UserCircle2 className="w-4 h-4" />
+                            <div className="p-6 space-y-4">
+                                {/* Info Owner (Read Only) */}
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-xs text-gray-400 uppercase font-bold">Zakat Owner</label>
+                                    <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm bg-indigo-400/10 px-2 py-1 rounded-lg border border-indigo-400/20">
+                                        <UserCircle2 className="w-3 h-3" />
                                         {selectedOwner === 'Husband' ? 'Suami' : 'Istri'}
                                     </div>
                                 </div>
@@ -330,11 +329,11 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                     <select 
                                         value={paymentSourceAccountId} 
                                         onChange={e => setPaymentSourceAccountId(e.target.value)} 
-                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-blue-500/30 outline-none focus:border-blue-500"
+                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-indigo-500"
                                     >
                                         <option value="" disabled>Select Account</option>
                                         {accounts
-                                            // LOGIC FIX: Hanya tampilkan akun milik Owner yang sedang dipilih (atau akun tanpa owner/joint)
+                                            // LOGIC FIX: Filter hanya akun milik Owner yang dipilih (atau Joint)
                                             .filter(a => a.owner === selectedOwner || !a.owner) 
                                             .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
                                             .map(acc => (
@@ -343,22 +342,24 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                                 </option>
                                         ))}
                                     </select>
-                                    <p className="text-[10px] text-gray-500 mt-1 ml-1">
-                                        * Showing accounts for {selectedOwner === 'Husband' ? 'Husband' : 'Wife'} & Joint only.
+                                    <p className="text-[10px] text-gray-500 mt-1.5 ml-1">
+                                        * Hanya menampilkan akun {selectedOwner === 'Husband' ? 'Suami' : 'Istri'} & Joint.
                                     </p>
                                 </div>
                                 
                                 {/* Amount Display */}
-                                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
-                                    <p className="text-xs text-yellow-500 uppercase font-bold mb-1">Amount to Pay</p>
-                                    <p className="text-2xl font-bold text-white">{formatCurrency(calculationResult.zakatAmount)}</p>
+                                <div>
+                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount to Pay</label>
+                                    <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
+                                        <p className="text-2xl font-bold text-yellow-400">{formatCurrency(calculationResult.zakatAmount)}</p>
+                                    </div>
                                 </div>
 
                                 {/* Action Button */}
                                 <button 
                                     onClick={handlePayZakat}
                                     disabled={!paymentSourceAccountId}
-                                    className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-4 rounded-xl mt-4 transition-all shadow-lg shadow-yellow-900/20 mb-safe"
+                                    className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-3.5 rounded-xl mt-2 transition-all shadow-lg shadow-yellow-900/20"
                                 >
                                     Confirm Payment
                                 </button>
