@@ -1144,74 +1144,80 @@ const handleCreateAccount = async () => {
                               {/* --- LANGUAGE --- */}
                               <button onClick={() => setLang(lang === 'en' ? 'id' : 'en')} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700"><span>{t('language')}</span><span className="text-primary font-bold">{lang.toUpperCase()}</span></button>
                               
-                              {/* --- ACCENT COLOR (DIPERBAIKI) --- */}
+                              {/* --- ACCENT COLOR --- */}
                               <div className="p-3 bg-surface-light rounded-lg">
                                   <div className="flex justify-between items-center mb-3">
                                       <label className="text-xs text-gray-400 uppercase font-semibold">{t('accentColor')}</label>
+                                      {/* Tombol Pipette di Header tetap ada, tapi mentrigger input di bawah */}
+                                      <button 
+                                          onClick={() => accentInputRef.current?.showPicker ? accentInputRef.current.showPicker() : accentInputRef.current?.click()} 
+                                          className="p-1.5 rounded-full hover:bg-white/10" 
+                                          title={t('custom')}
+                                      >
+                                          <Pipette className="w-4 h-4 text-gray-400" />
+                                      </button>
+                                  </div>
+                                  <div className="flex gap-2 flex-wrap items-center">
+                                      {ACCENT_PRESETS.map(acc => (
+                                          <button key={acc.name} onClick={() => setCurrentAccent(acc.name)} className={`w-8 h-8 rounded-full border-2 transition-transform ${currentAccent === acc.name ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: acc.value }} />
+                                      ))}
                                       
-                                      {/* Container dibuat RELATIVE agar kita bisa atur posisi input di dalamnya */}
-                                      <div className="flex items-center gap-2 relative">
-                                          {/* Input Transparan & Digeser ke Kanan (-35px) */}
+                                      {/* === PERBAIKAN: Input dipindah ke sini (sebelah lingkaran Custom) === */}
+                                      <div className="relative">
                                           <input 
                                               ref={accentInputRef} 
                                               type="color" 
                                               value={customAccentHex} 
                                               onChange={(e) => { setCustomAccentHex(e.target.value); setCurrentAccent('Custom'); }} 
-                                              className="opacity-0 absolute top-1/2 -translate-y-1/2 w-0 h-0 cursor-pointer"
-                                              style={{ right: '-35px' }} 
+                                              // Posisi absolute di kanan luar (left-full = 100% ke kanan)
+                                              className="opacity-0 absolute left-full top-1/2 -translate-y-1/2 w-0 h-0 overflow-hidden ml-2" 
                                           />
                                           <button 
-                                              onClick={() => accentInputRef.current?.showPicker ? accentInputRef.current.showPicker() : accentInputRef.current?.click()} 
-                                              className="p-1.5 rounded-full hover:bg-white/10" 
-                                              title={t('custom')}
+                                            onClick={() => accentInputRef.current?.showPicker ? accentInputRef.current.showPicker() : accentInputRef.current?.click()} 
+                                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center bg-transparent transition-transform ${currentAccent === 'Custom' ? 'border-white scale-110' : 'border-gray-600'}`} 
+                                            style={{ backgroundColor: currentAccent === 'Custom' ? customAccentHex : 'transparent' }}
                                           >
-                                              <Pipette className="w-4 h-4 text-gray-400" />
+                                              {currentAccent !== 'Custom' && <div className="w-full h-full rounded-full" style={{background: `conic-gradient(red, yellow, lime, aqua, blue, magenta, red)`}} />}
                                           </button>
                                       </div>
                                   </div>
-                                  <div className="flex gap-2 flex-wrap">
-                                      {ACCENT_PRESETS.map(acc => (
-                                          <button key={acc.name} onClick={() => setCurrentAccent(acc.name)} className={`w-8 h-8 rounded-full border-2 transition-transform ${currentAccent === acc.name ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: acc.value }} />
-                                      ))}
-                                      {/* Tombol Bulat Custom juga men-trigger picker yang sama */}
-                                      <button onClick={() => accentInputRef.current?.showPicker ? accentInputRef.current.showPicker() : accentInputRef.current?.click()} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center bg-transparent transition-transform ${currentAccent === 'Custom' ? 'border-white scale-110' : 'border-gray-600'}`} style={{ backgroundColor: currentAccent === 'Custom' ? customAccentHex : 'transparent' }}>
-                                          {currentAccent !== 'Custom' && <div className="w-full h-full rounded-full" style={{background: `conic-gradient(red, yellow, lime, aqua, blue, magenta, red)`}} />}
-                                      </button>
-                                  </div>
                               </div>
 
-                              {/* --- BACKGROUND THEME (DIPERBAIKI) --- */}
+                              {/* --- BACKGROUND THEME --- */}
                               <div className="p-3 bg-surface-light rounded-lg">
                                   <div className="flex justify-between items-center mb-3">
                                       <label className="text-xs text-gray-400 uppercase font-semibold">{t('bgTheme')}</label>
+                                      <button 
+                                          onClick={() => bgInputRef.current?.showPicker ? bgInputRef.current.showPicker() : bgInputRef.current?.click()} 
+                                          className="p-1.5 rounded-full hover:bg-white/10" 
+                                          title={t('custom')}
+                                      >
+                                          <Palette className="w-4 h-4 text-gray-400" />
+                                      </button>
+                                  </div>
+                                  <div className="flex gap-2 flex-wrap items-center">
+                                      {BG_THEMES.map(theme => (
+                                          <button key={theme.name} onClick={() => setCurrentTheme(theme.name)} className={`w-8 h-8 rounded-full border-2 transition-transform ${currentTheme === theme.name ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: theme.bg }} />
+                                      ))}
                                       
-                                      {/* Container RELATIVE */}
-                                      <div className="flex items-center gap-2 relative">
-                                          {/* Input Transparan & Digeser ke Kanan (-35px) */}
+                                      {/* === PERBAIKAN: Input dipindah ke sini (sebelah lingkaran Custom) === */}
+                                      <div className="relative">
                                           <input 
                                               ref={bgInputRef} 
                                               type="color" 
                                               value={customBgHex} 
                                               onChange={(e) => { setCustomBgHex(e.target.value); setCurrentTheme('Custom'); }} 
-                                              className="opacity-0 absolute top-1/2 -translate-y-1/2 w-0 h-0 cursor-pointer" 
-                                              style={{ right: '-35px' }}
+                                              // Posisi absolute di kanan luar
+                                              className="opacity-0 absolute left-full top-1/2 -translate-y-1/2 w-0 h-0 overflow-hidden ml-2" 
                                           />
                                           <button 
-                                              onClick={() => bgInputRef.current?.showPicker ? bgInputRef.current.showPicker() : bgInputRef.current?.click()} 
-                                              className="p-1.5 rounded-full hover:bg-white/10" 
-                                              title={t('custom')}
+                                            onClick={() => bgInputRef.current?.showPicker ? bgInputRef.current.showPicker() : bgInputRef.current?.click()} 
+                                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center bg-transparent transition-transform ${currentTheme === 'Custom' ? 'border-white scale-110' : 'border-gray-600'}`} 
+                                            style={{ backgroundColor: currentTheme === 'Custom' ? customBgHex : 'transparent' }}
                                           >
-                                              <Palette className="w-4 h-4 text-gray-400" />
+                                              {currentTheme !== 'Custom' && <div className="w-full h-full rounded-full" style={{background: `conic-gradient(black, #333, #555, #111)`}} />}
                                           </button>
                                       </div>
-                                  </div>
-                                  <div className="flex gap-2 flex-wrap">
-                                      {BG_THEMES.map(theme => (
-                                          <button key={theme.name} onClick={() => setCurrentTheme(theme.name)} className={`w-8 h-8 rounded-full border-2 transition-transform ${currentTheme === theme.name ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: theme.bg }} />
-                                      ))}
-                                      <button onClick={() => bgInputRef.current?.showPicker ? bgInputRef.current.showPicker() : bgInputRef.current?.click()} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center bg-transparent transition-transform ${currentTheme === 'Custom' ? 'border-white scale-110' : 'border-gray-600'}`} style={{ backgroundColor: currentTheme === 'Custom' ? customBgHex : 'transparent' }}>
-                                          {currentTheme !== 'Custom' && <div className="w-full h-full rounded-full" style={{background: `conic-gradient(black, #333, #555, #111)`}} />}
-                                      </button>
                                   </div>
                               </div>
                           </div>
