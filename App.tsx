@@ -31,6 +31,55 @@ const BG_THEMES = [
 
 const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
 
+// === KOMPONEN BARU: INPUT CURRENCY YANG CANTIK ===
+interface CurrencyInputProps {
+    value: string | number;
+    onChange: (val: string) => void;
+    currency: 'IDR' | 'USD';
+    placeholder?: string;
+    className?: string;
+    autoFocus?: boolean;
+}
+
+const CurrencyInput = ({ value, onChange, currency, className, ...props }: CurrencyInputProps) => {
+    // Fungsi Format: Mengubah "5000000" jadi "5.000.000"
+    const formatDisplay = (val: string | number) => {
+        if (!val) return '';
+        const digits = val.toString().replace(/\D/g, ''); // Hapus karakter non-angka
+        if (!digits) return '';
+        // Format sesuai locale (IDR pakai titik, USD pakai koma)
+        return new Intl.NumberFormat(currency === 'IDR' ? 'id-ID' : 'en-US').format(BigInt(digits));
+    };
+
+    // Handle Perubahan: Bersihkan format, kirim angka murni ke state
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Ambil angka saja
+        const raw = e.target.value.replace(/\D/g, '');
+        onChange(raw);
+    };
+
+    return (
+        <div className="relative w-full">
+            {/* LABEL SIMBOL (Rp / $) */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <span className={`font-bold ${currency === 'IDR' ? 'text-emerald-500' : 'text-blue-500'}`}>
+                    {currency === 'IDR' ? 'Rp' : '$'}
+                </span>
+            </div>
+            
+            {/* INPUT FIELD */}
+            <input
+                type="text"
+                inputMode="numeric" // Agar keyboard HP tetap angka
+                value={formatDisplay(value)}
+                onChange={handleChange}
+                className={`w-full pl-12 pr-4 ${className}`} // pl-12 memberi ruang untuk label Rp
+                {...props}
+            />
+        </div>
+    );
+};
+
 const App = () => {
 
 
@@ -57,6 +106,8 @@ const App = () => {
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   
   const [lang, setLang] = useState<'en' | 'id'>('en');
+  // 1. TAMBAHKAN STATE CURRENCY INI
+  const [currency, setCurrency] = useState<'IDR' | 'USD'>('IDR');
   const [currentAccent, setCurrentAccent] = useState('Emerald');
   const [customAccentHex, setCustomAccentHex] = useState('#10b981');
   const [currentTheme, setCurrentTheme] = useState('Default');
@@ -318,6 +369,10 @@ useEffect(() => {
         setCategories(data.categories || DEFAULT_CATEGORIES);
         setLang(data.lang || 'en');
         
+
+        // LOAD CURRENCY
+        if (data.currency) setCurrency(data.currency);
+
         // Handle User Session from LocalStorage
        
 
@@ -403,7 +458,7 @@ useEffect(() => {
      if (!isDataLoaded) return; // Prevent overwriting data during initial load
 
      localStorage.setItem('financeProData', JSON.stringify({
-         accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang,
+         accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, currency,
          theme: { accent: currentAccent, customAccent: customAccentHex, bg: currentTheme, customBg: customBgHex }
      }));
   }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
@@ -630,10 +685,46 @@ const handleLogout = async () => {
   };
 
   const handleSaveAccountEdit = async () => {
-    if (editingAccount) {
-        // 1. Update ke Supabase (Jika Login)
+    if (!editingAccount) return;
+
+    // 1. VALIDASI: Cek Saldo Negatif
+    // Hanya Credit Cards dan Loans yang boleh memiliki saldo negatif
+    const allowedNegativeGroups = ['Credit Cards', 'Loans'];
+    if (editingAccount.balance < 0 && !allowedNegativeGroups.includes(editingAccount.group)) {
+        alert("Error: Saldo tidak boleh negatif (kecuali untuk Kartu Kredit / Hutang).");
+        return;
+    }
+
+    try {
+        // Ambil data akun lama untuk perbandingan
+        const oldAccount = accounts.find(a => a.id === editingAccount.id);
+        if (!oldAccount) return;
+
+        // 2. HITUNG SELISIH (Untuk Transaksi Adjustment Otomatis)
+        const diff = editingAccount.balance - oldAccount.balance;
+        let adjustmentTx: Transaction | null = null;
+
+        // Jika saldo berubah, siapkan data transaksi penyesuaian
+        if (diff !== 0) {
+            const isSurplus = diff > 0;
+            const absAmount = Math.abs(diff);
+
+            adjustmentTx = {
+                id: `adj-${Date.now()}`,
+                date: new Date().toISOString(),
+                type: isSurplus ? 'INCOME' : 'EXPENSE',
+                amount: absAmount,
+                accountId: editingAccount.id,
+                // Menggunakan 'toAccountId' null/undefined karena ini adjustment
+                category: 'Adjustment', 
+                notes: `Balance Correction (${isSurplus ? 'Surplus' : 'Deficit'}) - Manual Edit`
+            };
+        }
+
+        // 3. SIMPAN KE SUPABASE (Jika Login)
         if (user && user.id) {
-            const { error } = await supabase
+            // A. Update Data Akun
+            const { error: accError } = await supabase
               .from('accounts')
               .update({
                   name: editingAccount.name,
@@ -644,52 +735,45 @@ const handleLogout = async () => {
               .eq('id', editingAccount.id)
               .eq('user_id', user.id);
 
-            if (error) {
-                alert("Gagal update akun online: " + error.message);
-                return;
-            }
-        }
+            if (accError) throw new Error("Gagal update akun: " + accError.message);
 
-        // 2. Logika Lama (Adjustment Transaction Lokal & State Update)
-        const oldAccount = accounts.find(a => a.id === editingAccount.id);
-        if (oldAccount && oldAccount.balance !== editingAccount.balance) {
-            const diff = editingAccount.balance - oldAccount.balance;
-            
-            const newTx: Transaction = {
-                id: `adj-${Date.now()}`,
-                date: new Date().toISOString(),
-                type: diff > 0 ? 'INCOME' : 'EXPENSE',
-                amount: Math.abs(diff),
-                accountId: editingAccount.id,
-                category: 'Adjustment',
-                notes: `Manual Balance Correction (${diff > 0 ? 'Surplus' : 'Deficit'})`
-            };
-            
-            // Opsional: Simpan Adjustment ke Cloud juga
-            if (user && user.id) {
-               await supabase.from('transactions').insert([{
+            // B. Insert Transaksi Adjustment (Jika ada selisih)
+            if (adjustmentTx) {
+               const { error: txError } = await supabase.from('transactions').insert([{
                    user_id: user.id,
-                   amount: newTx.amount,
-                   type: newTx.type,
-                   category: newTx.category,
-                   note: newTx.notes,
-                   date: newTx.date,
-                   account_id: newTx.accountId
+                   amount: adjustmentTx.amount,
+                   type: adjustmentTx.type,
+                   category: adjustmentTx.category,
+                   note: adjustmentTx.notes,
+                   date: adjustmentTx.date,
+                   account_id: adjustmentTx.accountId
                }]);
+               
+               if (txError) console.error("Gagal simpan adjustment ke cloud:", txError);
             }
-
-            setTransactions(prev => [newTx, ...prev]);
         }
 
-        // 3. Update State Lokal
+        // 4. UPDATE STATE LOKAL (Agar UI langsung berubah)
+        // Update List Akun
         setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a));
         
+        // Masukkan Transaksi Baru ke List
+        if (adjustmentTx) {
+            setTransactions(prev => [adjustmentTx!, ...prev]);
+        }
+        
+        // Update tampilan detail jika sedang dibuka
         if (selectedAccountForDetail && selectedAccountForDetail.id === editingAccount.id) {
             setSelectedAccountForDetail(editingAccount);
         }
 
+        // Tutup Modal & Beri Feedback
         setShowEditAccountModal(false);
         setEditingAccount(null);
+        // alert("Perubahan berhasil disimpan!"); // Opsional: Boleh dihapus jika ingin silent
+
+    } catch (err: any) {
+        alert("Terjadi kesalahan: " + err.message);
     }
 };
 
@@ -1191,6 +1275,25 @@ const handleSubmitNewAccount = async () => {
                               {/* --- LANGUAGE --- */}
                               <button onClick={() => setLang(lang === 'en' ? 'id' : 'en')} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700"><span>{t('language')}</span><span className="text-primary font-bold">{lang.toUpperCase()}</span></button>
                               
+                              {/* --- CURRENCY SETTING (BARU) --- */}
+                              <div className="flex items-center justify-between p-3 bg-surface-light rounded-lg">
+                                  <span className="text-sm font-medium text-gray-300">Currency Format</span>
+                                  <div className="flex bg-black/20 p-1 rounded-lg">
+                                      <button 
+                                          onClick={() => setCurrency('IDR')}
+                                          className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${currency === 'IDR' ? 'bg-emerald-600 text-white shadow' : 'text-gray-500 hover:text-white'}`}
+                                      >
+                                          Rp (IDR)
+                                      </button>
+                                      <button 
+                                          onClick={() => setCurrency('USD')}
+                                          className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${currency === 'USD' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-white'}`}
+                                      >
+                                          $ (USD)
+                                      </button>
+                                  </div>
+                              </div>
+
                               {/* --- ACCENT COLOR --- */}
                               <div className="p-3 bg-surface-light rounded-lg">
                                   <div className="flex justify-between items-center mb-3">
@@ -1409,20 +1512,14 @@ const handleSubmitNewAccount = async () => {
                                 </button>
                             </div>
 
-                            {/* Amount Input (Fixed Keypad) */}
+                            {/* Amount (DIPERBAIKI: Pake CurrencyInput) */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
-                                <input 
-                                    type="number"
-                                    inputMode="decimal" // Keypad Angka
-                                    min="0"
+                                <CurrencyInput 
                                     value={newTxAmount}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (parseFloat(val) < 0) return; 
-                                        setNewTxAmount(val);
-                                    }}
-                                    className={`w-full bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600`}
+                                    onChange={val => setNewTxAmount(val)}
+                                    currency={currency}
+                                    className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600"
                                     placeholder="0"
                                     autoFocus
                                 />
@@ -1561,12 +1658,12 @@ const handleSubmitNewAccount = async () => {
                         {/* Di dalam Edit Account Modal */}
                         <div>
                             <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Current Balance</label>
-                            <input 
-                                type="number"         // <--- Tipe Number
-                                inputMode="decimal"   // <--- Keyboard HP Angka
+                            {/* GANTI INPUT BIASA DENGAN INI */}
+                            <CurrencyInput 
                                 value={editingAccount.balance}
-                                onChange={e => setEditingAccount({...editingAccount, balance: parseFloat(e.target.value) || 0})}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg"
+                                onChange={val => setEditingAccount({...editingAccount, balance: parseFloat(val) || 0})}
+                                currency={currency}
+                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
                             />
                             <p className="text-[10px] text-gray-500 mt-1">* Adjusting this creates a correction transaction.</p>
                         </div>
@@ -1712,15 +1809,15 @@ const handleSubmitNewAccount = async () => {
                             </div>
                         </div>
 
+                
                         {/* Initial Balance (Optional) */}
                         <div>
                             <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Initial Balance (Optional)</label>
-                            <input 
-                                type="number"        // Tipe Number
-                                inputMode="decimal"  // Keyboard HP Angka
+                            <CurrencyInput 
                                 value={newAccBalance}
-                                onChange={e => setNewAccBalance(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg"
+                                onChange={val => setNewAccBalance(val)}
+                                currency={currency}
+                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
                                 placeholder="0"
                             />
                         </div>

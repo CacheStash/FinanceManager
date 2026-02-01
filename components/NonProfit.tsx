@@ -412,23 +412,18 @@ const NonProfit: React.FC<NonProfitProps> = ({
                     </div>
                     {/* BAGIAN AMOUNT (Update inputMode) */}
                     {/* ... code sebelumnya ... */}
+                    {/* Di dalam NonProfit.tsx -> Modal Deposit */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
-                        <input 
-                            type="number"         // <--- Pastikan type number
-                            inputMode="decimal"   // <--- INI KUNCINYA (Keyboard Angka)
-                            min="0"
+                        {/* GUNAKAN CurrencyInput DI SINI JUGA */}
+                        <CurrencyInput 
                             value={amount}
-                            onChange={e => setAmount(e.target.value)}
-                            className={`w-full bg-[#18181b] border rounded-xl p-4 text-2xl font-bold outline-none text-right transition-colors ${
-                                isInsufficientBalance 
-                                ? 'border-red-500 text-red-500' 
-                                : 'border-white/10 text-white focus:border-white/30'
-                            }`}
+                            onChange={val => setAmount(val)}
+                            currency={lang === 'id' ? 'IDR' : 'USD'} // Atau terima prop currency dari parent
+                            className={`bg-[#18181b] border rounded-xl p-4 text-2xl font-bold outline-none text-right ...`}
                             placeholder="0"
                             autoFocus
                         />
-                        {/* ... error message handling ... */}
                     </div>
 
                     {/* BAGIAN NOTE (Date dihapus, Note jadi full width) */}
