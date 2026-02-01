@@ -228,7 +228,7 @@ const App = () => {
 
     return () => subscription.unsubscribe();
   }, []);
-  
+
 // --- B. AUTO-SAVE SETTINGS (DEBOUNCE 2 DETIK) ---
 useEffect(() => {
     // Jangan simpan kalau user belum login atau data belum siap
@@ -1615,13 +1615,22 @@ const handleCreateAccount = async () => {
                         </div>
                         <div>
                             <label className="text-xs text-gray-500 font-bold ml-1">Password</label>
-                            <input 
-                                type="password" 
-                                value={regPass}
-                                onChange={e => setRegPass(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                placeholder="••••••"
-                            />
+                            <div className="relative">
+                                <input 
+                                    type={showPassword ? "text" : "password"} 
+                                    value={regPass}
+                                    onChange={e => setRegPass(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary pr-10"
+                                    placeholder="••••••"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
