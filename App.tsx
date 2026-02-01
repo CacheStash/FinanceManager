@@ -1117,7 +1117,13 @@ const handleCreateAccount = async () => {
                 // TAMBAHKAN BARIS DI BAWAH INI:
                 onDelete={handleDeleteTransaction} 
             />;
-          case 'stats': return <Reports transactions={transactions} accounts={accounts} lang={lang} />;
+          case 'stats': 
+    return (
+        // Tambahkan div pembungkus ini agar bisa di-scroll
+        <div className="h-full overflow-y-auto pb-24"> 
+            <Reports transactions={transactions} accounts={accounts} lang={lang} />
+        </div>
+    );
           case 'accounts': return renderAccountsTab();
           case 'non-profit': 
             return <NonProfit 
