@@ -130,7 +130,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
     }, []);
 
     return (
-        <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
+        <div className="flex flex-col h-full bg-background pb-40 overflow-y-auto">
             {/* --- HEADER DYNAMIC --- */}
             <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
                  <div 
@@ -254,16 +254,23 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                 </div>
 
                                 <button 
-                                    onClick={() => {
-                                        setPaymentSourceAccountId(accounts.find(a => a.group === 'Cash' || a.group === 'Bank Accounts')?.id || '');
-                                        setShowPayModal(true);
-                                    }}
-                                    className="w-full py-3 hover:opacity-90 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
-                                    style={{ backgroundColor: '#ca8a04' }}
-                                >
-                                    <HandCoins className="w-5 h-5" />
-                                    Bayar Zakat Sekarang
-                                </button>
+                                onClick={() => {
+                                    // LOGIC BARU: Auto select akun pertama yang valid milik owner tersebut
+                                    const validAccount = accounts
+                                        .filter(a => a.owner === selectedOwner || !a.owner)
+                                        .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
+                                        // Opsional: Sort by balance tertinggi biar aman
+                                        .sort((a,b) => b.balance - a.balance) 
+                                        [0];
+
+                                    setPaymentSourceAccountId(validAccount ? validAccount.id : '');
+                                    setShowPayModal(true);
+                                }}
+                                className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-yellow-900/20 transition-all active:scale-95"
+                            >
+                                <HandCoins className="w-5 h-5" />
+                                Bayar Zakat Sekarang
+                            </button>
                             </div>
                         </div>
                     </div>
@@ -289,36 +296,69 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                     </div>
                 )}
 
-                {/* PAY ZAKAT MODAL */}
+                {/* PAY ZAKAT MODAL (UPDATED) */}
                 {showPayModal && (
                     <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
-                        <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300">
-                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b]">
+                        {/* FIX UI: 
+                           1. max-h-[90vh]: Agar modal tidak melebihi tinggi layar
+                           2. overflow-y-auto: Agar bisa di-scroll jika konten panjang
+                           3. pb-10: Memberi nafas di bagian bawah agar tombol tidak mepet bezel HP 
+                        */}
+                        <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col">
+                            
+                            {/* Header Modal */}
+                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
                                 <h3 className="font-bold text-white text-lg">Bayar Zakat Mal</h3>
                                 <button onClick={() => setShowPayModal(false)}><X className="w-6 h-6 text-gray-400" /></button>
                             </div>
-                            <div className="p-6 space-y-5">
+
+                            {/* Content Modal (Scrollable) */}
+                            <div className="p-6 space-y-5 overflow-y-auto pb-10">
+                                
+                                {/* Info Zakat Type */}
+                                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex justify-between items-center">
+                                    <span className="text-xs text-indigo-300 font-bold uppercase">Zakat Owner</span>
+                                    <div className="flex items-center gap-2 text-indigo-100 font-bold text-sm">
+                                        <UserCircle2 className="w-4 h-4" />
+                                        {selectedOwner === 'Husband' ? 'Suami' : 'Istri'}
+                                    </div>
+                                </div>
+
+                                {/* Source Account Selection (Context Aware) */}
                                 <div>
                                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Source Account</label>
                                     <select 
                                         value={paymentSourceAccountId} 
                                         onChange={e => setPaymentSourceAccountId(e.target.value)} 
-                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-white/30"
+                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-blue-500/30 outline-none focus:border-blue-500"
                                     >
                                         <option value="" disabled>Select Account</option>
-                                        {accounts.filter(a => a.group === 'Cash' || a.group === 'Bank Accounts').map(acc => (
-                                            <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                                        {accounts
+                                            // LOGIC FIX: Hanya tampilkan akun milik Owner yang sedang dipilih (atau akun tanpa owner/joint)
+                                            .filter(a => a.owner === selectedOwner || !a.owner) 
+                                            .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
+                                            .map(acc => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {acc.name} ({formatCurrency(acc.balance)})
+                                                </option>
                                         ))}
                                     </select>
+                                    <p className="text-[10px] text-gray-500 mt-1 ml-1">
+                                        * Showing accounts for {selectedOwner === 'Husband' ? 'Husband' : 'Wife'} & Joint only.
+                                    </p>
                                 </div>
+                                
+                                {/* Amount Display */}
                                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
                                     <p className="text-xs text-yellow-500 uppercase font-bold mb-1">Amount to Pay</p>
                                     <p className="text-2xl font-bold text-white">{formatCurrency(calculationResult.zakatAmount)}</p>
                                 </div>
+
+                                {/* Action Button */}
                                 <button 
                                     onClick={handlePayZakat}
                                     disabled={!paymentSourceAccountId}
-                                    className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-4 rounded-xl mt-4 transition-all"
+                                    className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-4 rounded-xl mt-4 transition-all shadow-lg shadow-yellow-900/20 mb-safe"
                                 >
                                     Confirm Payment
                                 </button>
