@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
-import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock } from 'lucide-react';
 import { subDays, parseISO, format } from 'date-fns';
 
 interface ZakatMalProps {
@@ -18,28 +18,27 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
     const [showPayModal, setShowPayModal] = useState(false);
     const [paymentSourceAccountId, setPaymentSourceAccountId] = useState('');
 
+    const formatCurrency = (val: number) => 
+        new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+
     // --- 1. FETCH LIVE GOLD PRICE (TRICK: Using Public JSON via Proxy) ---
     const fetchLiveGoldPrice = async () => {
         setIsFetchingPrice(true);
         try {
             // URL ini adalah endpoint publik yang digunakan widget website goldprice.org
-            // Kita gunakan 'allorigins' sebagai proxy untuk menghindari masalah CORS di browser.
             const response = await fetch('https://api.allorigins.win/raw?url=https://data-asg.goldprice.org/dbXRates/IDR');
             const data = await response.json();
             
             // Data format: { items: [ { xauPrice: 35000000, ... } ] }
-            // xauPrice adalah harga per Ounce (oz). 
-            // 1 Troy Ounce = 31.1035 Gram.
+            // xauPrice adalah harga per Ounce (oz). 1 Troy Ounce = 31.1035 Gram.
             if (data.items && data.items.length > 0) {
                 const pricePerOz = data.items[0].xauPrice;
                 const pricePerGram = pricePerOz / 31.1035;
-                
-                // Bulatkan ke ribuan terdekat agar rapi
                 setGoldPrice(Math.round(pricePerGram));
             }
         } catch (error) {
             console.error("Gagal update harga emas:", error);
-            alert("Gagal mengambil harga live. Menggunakan harga terakhir.");
+            // Silent fail, pakai harga default/terakhir
         } finally {
             setIsFetchingPrice(false);
         }
@@ -122,9 +121,6 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
         setShowPayModal(false);
     };
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
-
     const currentHijriDisplay = useMemo(() => {
         try {
             return new Intl.DateTimeFormat('id-ID-u-ca-islamic', {
@@ -174,7 +170,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                         ))}
                     </div>
                     
-                    {/* INPUT HARGA EMAS + TOMBOL REFRESH */}
+                    {/* INPUT HARGA EMAS (READ ONLY) */}
                     <div>
                         <div className="flex justify-between items-center mb-2">
                             <label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">Current Gold Price / Gram (IDR)</label>
@@ -191,13 +187,14 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                         
                         <div className="relative group">
                             <input 
-                                type="number"
-                                value={goldPrice}
-                                onChange={e => setGoldPrice(Number(e.target.value))}
-                                className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-white outline-none focus:border-white/30 transition-colors"
+                                type="text" // Ubah ke text agar bisa menampilkan format Rp
+                                value={formatCurrency(goldPrice)} // Tampilkan nilai yang sudah diformat
+                                readOnly // MATIKAN EDIT MANUAL
+                                className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-gray-400 outline-none cursor-not-allowed opacity-80" // Style Read-Only
                             />
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-yellow-500/10 p-1.5 rounded-lg group-focus-within:bg-yellow-500/20 transition-colors">
-                                <Coins className="w-4 h-4 text-yellow-500" />
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/5 p-1.5 rounded-lg">
+                                {/* Ganti Icon jadi Lock atau tetap Coins tapi redup */}
+                                <Lock className="w-4 h-4 text-gray-500" />
                             </div>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-2 flex justify-between">
