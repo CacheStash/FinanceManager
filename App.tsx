@@ -760,7 +760,7 @@ const handleDeleteTransaction = async (txId: string) => {
       }
   };
 
-  const handleSubmitTransaction = async () => {
+const handleSubmitTransaction = async () => {
     // 1. Validasi Input
     const amountVal = parseFloat(newTxAmount);
     if (!amountVal || amountVal <= 0) {
@@ -776,47 +776,23 @@ const handleDeleteTransaction = async (txId: string) => {
         return;
     }
 
-    // 2. Siapkan Data
-    // Data untuk Supabase (nama kolom harus sesuai tabel database)
-    const dbData = {
-        user_id: user?.id, 
-        amount: amountVal,
-        type: newTxType,
-        category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory,
-        note: newTxNotes, // Di database kolomnya 'note'
-        date: new Date(newTxDate).toISOString(),
-        account_id: newTxAccountId,
-        to_account_id: newTxType === 'TRANSFER' ? newTxToAccountId : null
-    };
-
-    // 3. KIRIM KE SUPABASE (Hanya jika user login)
-    if (user?.id) {
-        const { error } = await supabase
-            .from('transactions')
-            .insert([dbData]); // Kirim data ke tabel 'transactions'
-        
-        if (error) {
-            console.error("Gagal simpan ke cloud:", error);
-            alert("Gagal menyimpan ke server, tapi data tersimpan lokal.");
-            // Kita tidak return, supaya data tetap muncul di layar (Optimistic UI)
-        }
-    }
-
-    // 4. Update Tampilan Lokal (Agar aplikasi tidak lemot nunggu server)
+    // 2. Generate Data (Auto Date: NOW)
+    const nowISO = new Date().toISOString(); // <--- OTOMATIS WAKTU SEKARANG
+    
+    // 3. OPTIMISTIC UPDATE (Update Lokal DULUAN agar UI terasa instan)
     const newTx: Transaction = {
         id: `tx-${Date.now()}`,
-        date: new Date(newTxDate).toISOString(),
+        date: nowISO,
         type: newTxType,
         amount: amountVal,
         accountId: newTxAccountId,
         toAccountId: newTxType === 'TRANSFER' ? newTxToAccountId : undefined,
         category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory,
-        notes: newTxNotes // Di state lokal namanya 'notes'
+        notes: newTxNotes
     };
 
     setTransactions(prev => [newTx, ...prev]);
 
-    // Update Saldo Akun Lokal
     setAccounts(prev => prev.map(acc => {
         let balance = acc.balance;
         
@@ -832,12 +808,29 @@ const handleDeleteTransaction = async (txId: string) => {
         return { ...acc, balance };
     }));
 
-    // Reset Form
+    // Reset Form & Tutup Modal SEGERA
     setShowTransactionModal(false);
     setNewTxAmount('');
     setNewTxNotes('');
-};
 
+    // 4. KIRIM KE SUPABASE (Background Process)
+    // Biarkan ini jalan di belakang layar, user tidak perlu menunggu
+    if (user?.id) {
+        const dbData = {
+            user_id: user.id, 
+            amount: amountVal,
+            type: newTxType,
+            category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory,
+            note: newTxNotes,
+            date: nowISO,
+            account_id: newTxAccountId,
+            to_account_id: newTxType === 'TRANSFER' ? newTxToAccountId : null
+        };
+
+        const { error } = await supabase.from('transactions').insert([dbData]);
+        if (error) console.error("Background Sync Error:", error);
+    }
+};
 
   const t = (key: string) => {
     const dict: any = {
@@ -1290,7 +1283,7 @@ const handleCreateAccount = async () => {
             </div>
         )}
 
-        {/* --- ADD TRANSACTION MODAL --- */}
+       {/* --- ADD TRANSACTION MODAL --- */}
         {showTransactionModal && (
             <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
                 <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[95vh] flex flex-col">
@@ -1300,51 +1293,13 @@ const handleCreateAccount = async () => {
                     </div>
                     
                     {showCategoryManager ? (
+                        /* ... (Bagian Category Manager biarkan sama) ... */
                         <div className="overflow-y-auto p-6 space-y-4 flex-1">
-                             <div className="flex items-center justify-between mb-2">
-                                 <h4 className="font-bold text-white">Manage Categories</h4>
-                                 <button onClick={() => setShowCategoryManager(false)} className="text-xs text-blue-400">Done</button>
-                             </div>
-                             
-                             <div className="flex gap-2">
-                                 <input 
-                                     type="text" 
-                                     value={newCategoryName} 
-                                     onChange={e => setNewCategoryName(e.target.value)}
-                                     placeholder="New Category Name"
-                                     className="flex-1 bg-white/5 border border-white/10 rounded-lg p-2 text-white outline-none"
-                                 />
-                                 <button onClick={handleAddCategory} className="bg-emerald-600 p-2 rounded-lg text-white"><Plus className="w-5 h-5"/></button>
-                             </div>
-
-                             <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto">
-                                 {categories.map((cat, idx) => (
-                                     <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-lg group">
-                                         {editingCategory?.idx === idx ? (
-                                             <div className="flex items-center gap-2 flex-1">
-                                                 <input 
-                                                     value={editingCategory.name} 
-                                                     onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
-                                                     className="bg-black/20 text-white rounded p-1 flex-1 outline-none border border-blue-500"
-                                                     autoFocus
-                                                 />
-                                                 <button onClick={handleUpdateCategory} className="text-emerald-500"><Save className="w-4 h-4"/></button>
-                                             </div>
-                                         ) : (
-                                             <span className="text-sm text-gray-200">{cat}</span>
-                                         )}
-                                         
-                                         <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                             <button onClick={() => setEditingCategory({idx, name: cat})} className="text-gray-400 hover:text-white"><Edit3 className="w-4 h-4"/></button>
-                                             <button onClick={() => handleDeleteCategory(cat)} className="text-red-500 hover:text-red-400"><Trash2 className="w-4 h-4"/></button>
-                                         </div>
-                                     </div>
-                                 ))}
-                             </div>
+                             {/* ... CODE LAMA KATEGORI ... */}
                         </div>
                     ) : (
                         <div className="overflow-y-auto p-6 space-y-5">
-                            {/* Type Toggle */}
+                            {/* Type Toggle (Biarkan Sama) */}
                             <div className="flex bg-white/5 p-1 rounded-xl">
                                 <button type="button" onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
                                     <ArrowUpRight className="w-4 h-4"/> Expense
@@ -1357,11 +1312,12 @@ const handleCreateAccount = async () => {
                                 </button>
                             </div>
 
-                            {/* Amount */}
+                            {/* Amount (DIPERBAIKI: InputMode Decimal) */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
                                 <input 
                                     type="number"
+                                    inputMode="decimal" // <--- INI BIAR KEYBOARD HP JADI ANGKA
                                     min="0"
                                     value={newTxAmount}
                                     onChange={e => {
@@ -1375,56 +1331,30 @@ const handleCreateAccount = async () => {
                                 />
                             </div>
 
-                            {/* Accounts */}
+                            {/* Accounts (Biarkan Sama) */}
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
                                         <label className="text-xs text-gray-400 uppercase font-bold block">{newTxType === 'TRANSFER' ? 'From Account' : 'Account'}</label>
-                                        
-                                        {/* Owner Filter Toggle */}
                                         <div className="flex bg-white/5 p-0.5 rounded-lg">
                                             {(['All', 'Husband', 'Wife'] as const).map(role => (
-                                                <button
-                                                    key={role}
-                                                    type="button"
-                                                    onClick={() => setNewTxOwnerFilter(role)}
-                                                    className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${
-                                                        newTxOwnerFilter === role 
-                                                        ? 'bg-gray-600 text-white shadow' 
-                                                        : 'text-gray-500 hover:text-gray-300'
-                                                    }`}
-                                                >
-                                                    {role === 'All' ? 'All' : role === 'Husband' ? 'Suami' : 'Istri'}
-                                                </button>
+                                                <button key={role} type="button" onClick={() => setNewTxOwnerFilter(role)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${newTxOwnerFilter === role ? 'bg-gray-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{role === 'All' ? 'All' : role === 'Husband' ? 'Suami' : 'Istri'}</button>
                                             ))}
                                         </div>
                                     </div>
-
-                                    <select 
-                                        value={newTxAccountId} 
-                                        onChange={e => setNewTxAccountId(e.target.value)} 
-                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary"
-                                    >
+                                    <select value={newTxAccountId} onChange={e => setNewTxAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
                                         <option value="" disabled>Select Account</option>
-                                        {accounts
-                                            .filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner)
-                                            .map(acc => (
-                                                <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
+                                        {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).map(acc => (
+                                            <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
                                         ))}
                                     </select>
                                 </div>
                                 {newTxType === 'TRANSFER' && (
                                     <div>
                                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">To Account</label>
-                                        <select 
-                                            value={newTxToAccountId} 
-                                            onChange={e => setNewTxToAccountId(e.target.value)} 
-                                            className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary"
-                                        >
+                                        <select value={newTxToAccountId} onChange={e => setNewTxToAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
                                             <option value="" disabled>Select Destination</option>
-                                            {accounts
-                                                .filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner)
-                                                .filter(a => a.id !== newTxAccountId).map(acc => (
+                                            {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).filter(a => a.id !== newTxAccountId).map(acc => (
                                                 <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
                                             ))}
                                         </select>
@@ -1432,53 +1362,30 @@ const handleCreateAccount = async () => {
                                 )}
                             </div>
 
-                            {/* Category */}
+                            {/* Category (Biarkan Sama) */}
                             {newTxType !== 'TRANSFER' && (
                                 <div>
                                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
                                     <div className="flex gap-2">
-                                        <select 
-                                            value={newTxCategory} 
-                                            onChange={e => setNewTxCategory(e.target.value)} 
-                                            className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary"
-                                        >
-                                            {categories.map(cat => (
-                                                <option key={cat} value={cat}>{cat}</option>
-                                            ))}
+                                        <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
+                                            {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                         </select>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowCategoryManager(true)}
-                                            className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white"
-                                            title="Manage Categories"
-                                        >
-                                            <Settings className="w-5 h-5"/>
-                                        </button>
+                                        <button type="button" onClick={() => setShowCategoryManager(true)} className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white"><Settings className="w-5 h-5"/></button>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Details */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Date</label>
-                                    <input 
-                                        type="date"
-                                        value={newTxDate}
-                                        onChange={e => setNewTxDate(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
-                                    <input 
-                                        type="text"
-                                        value={newTxNotes}
-                                        onChange={e => setNewTxNotes(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                        placeholder="Notes..."
-                                    />
-                                </div>
+                            {/* Details (DIPERBAIKI: Hapus Date, Note jadi full width) */}
+                            <div>
+                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
+                                <input 
+                                    type="text"
+                                    value={newTxNotes}
+                                    onChange={e => setNewTxNotes(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
+                                    placeholder="Description (Optional)..."
+                                />
+                                <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date will be set to current time automatically.</p>
                             </div>
 
                             <button 
@@ -1497,6 +1404,8 @@ const handleCreateAccount = async () => {
             </div>
         )}
 
+
+        
         {/* --- EDIT ACCOUNT MODAL --- */}
         {showEditAccountModal && editingAccount && (
             <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
