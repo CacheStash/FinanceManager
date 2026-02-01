@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, MousePointerClick, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'; // Tambah Trash2
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'; 
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
@@ -13,12 +13,11 @@ interface TransactionHistoryProps {
   accounts: Account[];
   lang?: 'en' | 'id';
   onSelectAccount?: (account: Account) => void;
-  onDelete?: (id: string) => void; // <--- TAMBAHAN PENTING 1
+  onDelete?: (id: string) => void; 
 }
 
 type DateRange = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'LIFETIME' | 'CUSTOM';
 
-// Tambahkan onDelete di sini 👇
 const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount, onDelete }) => {
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
   const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
@@ -116,8 +115,11 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
   const showSlider = dateRange !== 'LIFETIME' && dateRange !== 'CUSTOM';
 
   return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-white/10 overflow-hidden flex flex-col h-full">
-      <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-[#18181b]">
+    <div className="bg-surface rounded-2xl shadow-sm border border-white/10 overflow-hidden flex flex-col h-full transition-colors duration-300">
+      {/* FIX: Mengganti bg-[#18181b] (Hardcoded) menjadi bg-surface 
+         agar warna header mengikuti tema background user (Deep Forest, Midnight, dll).
+      */}
+      <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
         <div className="flex justify-between items-center">
              <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 {lang === 'en' ? 'Transactions' : 'Transaksi'}
@@ -154,14 +156,17 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2 bg-[#27272a] p-3 rounded-xl border border-white/5">
+        {/* FIX: Mengganti bg-[#27272a] menjadi bg-white/5 
+           agar box ringkasan ini transparan dan cocok dengan tema apapun.
+        */}
+        <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
             <div className="flex flex-col"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span><span className="text-sm font-bold text-emerald-400 truncate">{formatCurrency(summary.income)}</span></div>
             <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span><span className="text-sm font-bold text-rose-400 truncate">{formatCurrency(summary.expense)}</span></div>
             <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span><span className={`text-sm font-bold truncate ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</span></div>
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface">
+      <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface transition-colors duration-300">
         {filteredTransactions.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">{lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi'}</span></div>
         ) : (
@@ -198,11 +203,10 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                     {tx.notes && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
                   </div>
                   
-                  {/* --- TOMBOL HAPUS (KODE BARU) --- */}
                   {onDelete && (
                       <button 
                         onClick={(e) => {
-                            e.stopPropagation(); // Agar tidak trigger double click
+                            e.stopPropagation(); 
                             onDelete(tx.id);
                         }}
                         className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
