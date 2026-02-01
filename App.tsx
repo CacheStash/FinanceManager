@@ -1321,10 +1321,17 @@ const handleSubmitNewAccount = async () => {
             </div>
         )}
 
-       {/* --- ADD TRANSACTION MODAL (FIXED CATEGORY MANAGER) --- */}
+       {/* --- ADD TRANSACTION MODAL (FLOATING CENTER STYLE) --- */}
         {showTransactionModal && (
-            <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
-                <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[95vh] flex flex-col">
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+                {/* STYLE UPDATED:
+                   1. items-center: Posisi vertikal di tengah (bukan items-end/bawah)
+                   2. max-w-md: Lebar dibatasi agar rapi
+                   3. rounded-2xl: Sudut membulat penuh di semua sisi
+                   4. zoom-in-95: Efek muncul pop-up
+                   5. max-h-[90vh]: Agar tidak melebihi tinggi layar, konten bisa discroll
+                */}
+                <div className="w-full max-w-md bg-surface rounded-2xl border border-white/10 overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
                     
                     {/* Header Modal */}
                     <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
@@ -1460,7 +1467,6 @@ const handleSubmitNewAccount = async () => {
                                         <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
                                             {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                         </select>
-                                        {/* TOMBOL GEAR DIPERBAIKI: Type Button agar tidak submit form */}
                                         <button 
                                             type="button" 
                                             onClick={() => setShowCategoryManager(true)} 
@@ -1472,7 +1478,7 @@ const handleSubmitNewAccount = async () => {
                                 </div>
                             )}
 
-                            {/* Note */}
+                            {/* Note (Date removed as requested previously) */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
                                 <input 
@@ -1482,12 +1488,12 @@ const handleSubmitNewAccount = async () => {
                                     className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
                                     placeholder="Description (Optional)..."
                                 />
-                                <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date will be set to current time automatically.</p>
+                                <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date set to now automatically.</p>
                             </div>
 
                             <button 
                                 onClick={handleSubmitTransaction}
-                                className={`w-full font-bold py-4 rounded-xl mt-4 transition-all text-white shadow-lg ${
+                                className={`w-full font-bold py-3.5 rounded-xl mt-4 transition-all text-white shadow-lg ${
                                     newTxType === 'EXPENSE' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-900/20' :
                                     newTxType === 'INCOME' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20' :
                                     'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'
@@ -1500,7 +1506,6 @@ const handleSubmitNewAccount = async () => {
                 </div>
             </div>
         )}
-
 
 
         {/* --- EDIT ACCOUNT MODAL --- */}
