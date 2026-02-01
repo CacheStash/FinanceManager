@@ -127,18 +127,17 @@ const App = () => {
 
  // ================= MULAI KODE PERBAIKAN =================
 
-  // 1. FUNGSI LOAD DATA (OPTIMIZED: PARALLEL REQUESTS)
-  const loadDataFromSupabase = async (userId: string) => {
-    setIsLoading(true);
+  // 1. FUNGSI LOAD DATA (DENGAN MODE SILENT)
+  const loadDataFromSupabase = async (userId: string, isSilent = false) => {
+    // HANYA nyalakan loading screen jika BUKAN silent mode
+    if (!isSilent) setIsLoading(true);
 
     try {
         // --- PARALLEL FETCHING ---
-        // Kita "tembak" request Akun, Transaksi, dan Settings secara BERSAMAAN.
-        // Waktu tunggu jadi secepat request terlama, bukan total penjumlahan ketiganya.
         const [accRes, txRes, settingsRes] = await Promise.all([
             supabase.from('accounts').select('*').eq('user_id', userId),
             supabase.from('transactions').select('*').eq('user_id', userId),
-            loadSettingsFromSupabase(userId) // Pastikan fungsi ini async
+            loadSettingsFromSupabase(userId)
         ]);
 
         const accData = accRes.data;
@@ -148,8 +147,7 @@ const App = () => {
             console.error("Gagal ambil data:", accRes.error || txRes.error);
         }
 
-        // C. Masukkan ke State Aplikasi (Batch Update)
-        // React 18+ otomatis melakukan batching, tapi ini tetap good practice
+        // C. Masukkan ke State Aplikasi
         if (accData && accData.length > 0) {
             setAccounts(accData); 
         }
@@ -168,29 +166,23 @@ const App = () => {
         console.error("Critical Load Error:", err);
     } finally {
         setIsDataLoaded(true);
-        setIsLoading(false);
+        // HANYA matikan loading screen jika tadi dinyalakan
+        if (!isSilent) setIsLoading(false);
     }
   };
 
-
- // 2. USEEFFECT UTAMA (Cek Login & Load Data - DENGAN TIMEOUT PROTECTION)
+ // 2. // 2. USEEFFECT UTAMA
   useEffect(() => {
     const checkUser = async () => {
       try {
-          // --- PROTEKSI TIMEOUT (ANTI-STUCK) ---
-          // Kita buat balapan: "Tanya Supabase" vs "Timer"
-          
           const sessionPromise = supabase.auth.getSession();
+          // Timeout dipercepat jadi 1 detik biar ngebut
           const timeoutPromise = new Promise((resolve, reject) => {
-              // UBAH ANGKA INI: Dari 3000 (3 detik) ke 1000 (1 detik)
-              setTimeout(() => reject(new Error("Auth Timeout")), 1000); 
+              setTimeout(() => reject(new Error("Auth Timeout")), 1000);
           });
-          
-          // Mulai Balapan!
-          // Jika Supabase macet > 3 detik, timeoutPromise akan melempar Error.
+
           const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
           
-          // --- LOGIKA NORMAL ---
           if (session?.user) {
             setUser({
                 id: session.user.id,
@@ -198,24 +190,17 @@ const App = () => {
                 email: session.user.email || ''
             });
 
-            // Load data dari server
-            await loadDataFromSupabase(session.user.id);
+            // LOAD AWAL: Pake Loading Screen (isSilent = false)
+            await loadDataFromSupabase(session.user.id, false);
           } else {
-             // Tidak ada session (Logout)
              setIsDataLoaded(true); 
           }
 
       } catch (error) {
-          // --- JIKA TIMEOUT / ERROR TERJADI ---
-          console.warn("Auth check terlalu lama atau gagal, memaksa masuk mode Guest.", error);
-          
-          // Paksa aplikasi jalan terus (anggap sebagai Guest / Logout)
-          // Daripada user stuck di loading screen selamanya.
+          console.warn("Auth check timeout/gagal, masuk mode Guest.", error);
           setUser(null);
           setIsDataLoaded(true);
-
       } finally {
-          // Apapun yang terjadi (Sukses / Error / Timeout), Loading HARUS mati.
           setIsAuthLoading(false); 
           setIsLoading(false);
       }
@@ -223,15 +208,18 @@ const App = () => {
 
     checkUser();
 
-    // Listener Login/Logout (Tidak perlu timeout karena trigger user action)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // LISTENER: Saat token refresh (aplikasi resume dari background)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (session?.user) {
           setUser({
             id: session.user.id,
             name: session.user.user_metadata?.display_name || 'User',
             email: session.user.email || ''
           });
-          await loadDataFromSupabase(session.user.id);
+          
+          // REFRESH DATA: Pakai Mode SILENT (isSilent = true)
+          // Agar layar tidak tertutup loading hitam saat ganti aplikasi
+          await loadDataFromSupabase(session.user.id, true);
         } else {
           setUser(null);
         }
@@ -239,8 +227,8 @@ const App = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, []); 
- 
+  }, []);
+  
 // --- B. AUTO-SAVE SETTINGS (DEBOUNCE 2 DETIK) ---
 useEffect(() => {
     // Jangan simpan kalau user belum login atau data belum siap
