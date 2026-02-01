@@ -185,16 +185,32 @@ const NonProfit: React.FC<NonProfitProps> = ({
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
       {/* HEADER */}
-      <div className="p-6 pt-32 pb-40 bg-gradient-to-br from-emerald-900 via-[#064e3b] to-black rounded-b-[3rem] shadow-xl relative overflow-hidden text-center">
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-            <div className="w-32 h-32 bg-black rotate-45 border-4 border-yellow-600/50"></div>
+      {/* HAPUS class warna lama: bg-gradient-to-br from-emerald-900 via-[#064e3b] to-black */}
+      {/* GANTI dengan: bg-surface relative overflow-hidden */}
+      <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
+        
+        {/* --- LAYER 1: Dynamic Color Blending (Harmonisasi) --- */}
+        {/* Ini kuncinya: Menggunakan var(--color-primary) dengan opacity rendah & blending */}
+        <div 
+            className="absolute inset-0 opacity-30 mix-blend-hard-light"
+            style={{ 
+                background: `linear-gradient(to bottom right, var(--color-primary), transparent)` 
+            }}
+        ></div>
+        
+        {/* --- LAYER 2: Pattern Overlay (Opsional - Biar lebih texture) --- */}
+        <div className="absolute top-0 right-0 p-4 opacity-10 mix-blend-overlay">
+            <div className="w-32 h-32 bg-white rotate-45 border-4 border-white/50"></div>
         </div>
         
+        {/* CONTENT (Kasih relative z-10 biar di atas layer warna) */}
         <div className="relative z-10 mt-2">
-            <h1 className="text-xl md:text-2xl font-serif text-emerald-200 mb-6 uppercase tracking-widest border-b border-emerald-700/50 inline-block pb-3">
+            <h1 className="text-xl md:text-2xl font-serif text-white/80 mb-6 uppercase tracking-widest border-b border-white/20 inline-block pb-3">
                 {t('title')}
             </h1>
-            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{formatCurrency(totalBalance)}</h2>
+            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight drop-shadow-lg">
+                {formatCurrency(totalBalance)}
+            </h2>
         </div>
       </div>
 

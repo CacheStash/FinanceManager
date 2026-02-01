@@ -968,20 +968,39 @@ const handleCreateAccount = async () => {
               {/* ASSETS SUMMARY DASHBOARD */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Total Card */}
+                 {/* Total Card */}
                   <div 
                     onClick={() => { setAnalyticsScope({ type: 'GLOBAL' }); setShowAssetAnalytics(true); }}
-                    className="bg-gradient-to-br from-emerald-900 to-emerald-950 p-4 rounded-xl border border-emerald-500/30 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform"
+                    // HAPUS: bg-gradient-to-br from-emerald-900 to-emerald-950 border-emerald-500/30
+                    // GANTI DENGAN CODE DI BAWAH:
+                    className="relative p-4 rounded-xl overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform border border-white/10 bg-surface group"
                   >
+                      {/* BACKGROUND BLENDING: Mengikuti warna Primary User */}
+                      <div 
+                        className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                      ></div>
+                      
+                      {/* GRADIENT ACCENT: Agar tidak flat */}
+                      <div 
+                        className="absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-40 mix-blend-screen"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                      ></div>
+
                       <div className="relative z-10">
-                          <p className="text-emerald-300 text-xs font-bold uppercase tracking-wider mb-1">Total Assets</p>
+                          {/* Text color juga diubah jadi text-primary biar match */}
+                          <p className="text-primary text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--color-primary)' }}>
+                              Total Assets
+                          </p>
                           <p className="text-2xl font-bold text-white">{formatCurrency(totalAssets)}</p>
-                          <div className="flex items-center gap-1 mt-2 text-emerald-400/80 text-xs">
+                          <div className="flex items-center gap-1 mt-2 text-white/60 text-xs">
                               <TrendingUp className="w-3 h-3" />
                               <span>View Growth</span>
                           </div>
                       </div>
+                      
                       <div className="absolute right-0 bottom-0 opacity-10">
-                          <TrendingUp className="w-24 h-24 text-emerald-400" />
+                          <TrendingUp className="w-24 h-24 text-white" />
                       </div>
                   </div>
                   
