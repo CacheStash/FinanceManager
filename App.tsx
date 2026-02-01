@@ -1079,10 +1079,14 @@ const handleSubmitNewAccount = async () => {
                   )}
               </div>
 
-              // Cari tombol ini di renderAccountsTab:
-<button onClick={handleOpenAddAccountModal} className="..."> {/* GANTI handleCreateAccount JADI handleOpenAddAccountModal */}
-    <Plus className="w-5 h-5"/> Add Account
-</button>
+              
+<button 
+                  onClick={handleOpenAddAccountModal} 
+                  className="w-full py-4 mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20 transition-all active:scale-95"
+              >
+                  <Plus className="w-5 h-5 bg-white/20 rounded-full p-0.5" />
+                  Add New Account
+              </button>
           </div>
       );
   };
@@ -1317,23 +1321,75 @@ const handleSubmitNewAccount = async () => {
             </div>
         )}
 
-       {/* --- ADD TRANSACTION MODAL --- */}
+       {/* --- ADD TRANSACTION MODAL (FIXED CATEGORY MANAGER) --- */}
         {showTransactionModal && (
             <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
                 <div className="w-full md:w-[500px] bg-surface rounded-t-2xl md:rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[95vh] flex flex-col">
+                    
+                    {/* Header Modal */}
                     <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
-                        <h3 className="font-bold text-white text-lg">New Transaction</h3>
+                        <h3 className="font-bold text-white text-lg">
+                            {showCategoryManager ? 'Manage Categories' : 'New Transaction'}
+                        </h3>
                         <button onClick={() => { setShowTransactionModal(false); setShowCategoryManager(false); }}><X className="w-6 h-6 text-gray-400" /></button>
                     </div>
                     
+                    {/* === MODE 1: CATEGORY MANAGER === */}
                     {showCategoryManager ? (
-                        /* ... (Bagian Category Manager biarkan sama) ... */
                         <div className="overflow-y-auto p-6 space-y-4 flex-1">
-                             {/* ... CODE LAMA KATEGORI ... */}
+                             <div className="flex items-center justify-between mb-2">
+                                 <p className="text-xs text-gray-400">Add or edit your transaction categories.</p>
+                                 <button onClick={() => setShowCategoryManager(false)} className="text-xs font-bold text-blue-400 border border-blue-400/30 px-3 py-1 rounded-full">Done</button>
+                             </div>
+                             
+                             {/* Input Add Category */}
+                             <div className="flex gap-2">
+                                 <input 
+                                     type="text" 
+                                     value={newCategoryName} 
+                                     onChange={e => setNewCategoryName(e.target.value)}
+                                     placeholder="New Category Name..."
+                                     className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
+                                     onKeyDown={(e) => { if(e.key === 'Enter') handleAddCategory(); }}
+                                 />
+                                 <button onClick={handleAddCategory} className="bg-emerald-600 hover:bg-emerald-700 px-4 rounded-xl text-white shadow-lg"><Plus className="w-5 h-5"/></button>
+                             </div>
+
+                             {/* List Categories */}
+                             <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                 {categories.map((cat, idx) => (
+                                     <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 group hover:border-white/20 transition-colors">
+                                         {editingCategory?.idx === idx ? (
+                                             // Mode Edit
+                                             <div className="flex items-center gap-2 flex-1">
+                                                 <input 
+                                                     value={editingCategory.name} 
+                                                     onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
+                                                     className="bg-black/40 text-white rounded-lg p-2 flex-1 outline-none border border-blue-500 text-sm"
+                                                     autoFocus
+                                                 />
+                                                 <button onClick={handleUpdateCategory} className="p-2 bg-blue-600 rounded-lg text-white"><Save className="w-4 h-4"/></button>
+                                             </div>
+                                         ) : (
+                                             // Mode View
+                                             <span className="text-sm text-gray-200 font-medium pl-1">{cat}</span>
+                                         )}
+                                         
+                                         {/* Action Buttons */}
+                                         {editingCategory?.idx !== idx && (
+                                            <div className="flex gap-1">
+                                                <button onClick={() => setEditingCategory({idx, name: cat})} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg"><Edit3 className="w-4 h-4"/></button>
+                                                <button onClick={() => handleDeleteCategory(cat)} className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                         )}
+                                     </div>
+                                 ))}
+                             </div>
                         </div>
                     ) : (
+                        /* === MODE 2: FORM TRANSAKSI === */
                         <div className="overflow-y-auto p-6 space-y-5">
-                            {/* Type Toggle (Biarkan Sama) */}
+                            {/* Type Toggle */}
                             <div className="flex bg-white/5 p-1 rounded-xl">
                                 <button type="button" onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
                                     <ArrowUpRight className="w-4 h-4"/> Expense
@@ -1346,12 +1402,12 @@ const handleSubmitNewAccount = async () => {
                                 </button>
                             </div>
 
-                            {/* Amount (DIPERBAIKI: InputMode Decimal) */}
+                            {/* Amount Input (Fixed Keypad) */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
                                 <input 
                                     type="number"
-                                    inputMode="decimal" // <--- INI BIAR KEYBOARD HP JADI ANGKA
+                                    inputMode="decimal" // Keypad Angka
                                     min="0"
                                     value={newTxAmount}
                                     onChange={e => {
@@ -1365,7 +1421,7 @@ const handleSubmitNewAccount = async () => {
                                 />
                             </div>
 
-                            {/* Accounts (Biarkan Sama) */}
+                            {/* Accounts Selection */}
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
@@ -1396,7 +1452,7 @@ const handleSubmitNewAccount = async () => {
                                 )}
                             </div>
 
-                            {/* Category (Biarkan Sama) */}
+                            {/* Category with WORKING Gear Icon */}
                             {newTxType !== 'TRANSFER' && (
                                 <div>
                                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
@@ -1404,12 +1460,19 @@ const handleSubmitNewAccount = async () => {
                                         <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
                                             {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                         </select>
-                                        <button type="button" onClick={() => setShowCategoryManager(true)} className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white"><Settings className="w-5 h-5"/></button>
+                                        {/* TOMBOL GEAR DIPERBAIKI: Type Button agar tidak submit form */}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowCategoryManager(true)} 
+                                            className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors border border-white/5"
+                                        >
+                                            <Settings className="w-5 h-5"/>
+                                        </button>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Details (DIPERBAIKI: Hapus Date, Note jadi full width) */}
+                            {/* Note */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
                                 <input 

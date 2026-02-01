@@ -411,11 +411,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
                          )}
                     </div>
                     {/* BAGIAN AMOUNT (Update inputMode) */}
+                    {/* ... code sebelumnya ... */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
                         <input 
-                            type="number"
-                            inputMode="decimal" // <--- Keyboard Angka
+                            type="number"         // <--- Pastikan type number
+                            inputMode="decimal"   // <--- INI KUNCINYA (Keyboard Angka)
                             min="0"
                             value={amount}
                             onChange={e => setAmount(e.target.value)}
@@ -427,14 +428,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
                             placeholder="0"
                             autoFocus
                         />
-                         {isInsufficientBalance && (
-                            <div className="flex items-center justify-end mt-2 text-red-500 animate-in slide-in-from-top-1">
-                                <AlertCircle className="w-4 h-4 mr-1" />
-                                <span className="text-xs font-medium">
-                                    {t('insufficient')} (Max: {formatCurrency(selectedSourceAccount?.balance || 0)})
-                                </span>
-                            </div>
-                        )}
+                        {/* ... error message handling ... */}
                     </div>
 
                     {/* BAGIAN NOTE (Date dihapus, Note jadi full width) */}
