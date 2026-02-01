@@ -1051,6 +1051,15 @@ const handleCreateAccount = async () => {
   };
 
 
+  // --- TAMBAHKAN FUNGSI INI DI SINI ---
+  const handleClearHajjHistory = () => {
+      if (confirm(lang === 'en' ? 'Delete all Hajj/Umrah history?' : 'Hapus semua riwayat Haji/Umrah?')) {
+          setNonProfitTransactions([]);
+          // Kita update state lokal saja, karena history ini tidak disimpan di Supabase secara terpisah 
+          // (kecuali kamu mau bikin logic delete di Supabase juga, tapi untuk sekarang lokal cukup).
+      }
+  };
+
   const renderContent = () => {
       // 1. Asset Analytics View
       if (showAssetAnalytics) {
@@ -1088,7 +1097,27 @@ const handleCreateAccount = async () => {
             />;
           case 'stats': return <Reports transactions={transactions} accounts={accounts} lang={lang} />;
           case 'accounts': return renderAccountsTab();
-          case 'non-profit': return <NonProfit accounts={nonProfitAccounts} transactions={nonProfitTransactions} mainAccounts={accounts} onAddTransaction={(tx, src) => { setNonProfitTransactions(prev => [...prev, tx]); setNonProfitAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance + tx.amount} : a)); if (src && tx.amount > 0) { const mainTx: Transaction = { id: 'tr-' + tx.id, date: tx.date, type: 'EXPENSE', amount: tx.amount, accountId: src, category: 'Non-Profit Transfer', notes: 'Transfer to ' + tx.accountId }; setTransactions(prev => [mainTx, ...prev]); setAccounts(prev => prev.map(a => a.id === src ? {...a, balance: a.balance - tx.amount} : a)); } }} onUpdateBalance={(id, bal) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: bal} : a))} onComplete={(id) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: 0} : a))} lang={lang} />;
+          case 'non-profit': 
+            return <NonProfit 
+                accounts={nonProfitAccounts} 
+                transactions={nonProfitTransactions} 
+                mainAccounts={accounts} 
+                // --- TAMBAHKAN PROPS INI 👇 ---
+                onClearHistory={handleClearHajjHistory}
+                // ------------------------------
+                lang={lang} 
+                onAddTransaction={(tx, src) => { 
+                    setNonProfitTransactions(prev => [...prev, tx]); 
+                    setNonProfitAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance + tx.amount} : a)); 
+                    if (src && tx.amount > 0) { 
+                        const mainTx: Transaction = { id: 'tr-' + tx.id, date: tx.date, type: 'EXPENSE', amount: tx.amount, accountId: src, category: 'Non-Profit Transfer', notes: 'Transfer to ' + tx.accountId }; 
+                        setTransactions(prev => [mainTx, ...prev]); 
+                        setAccounts(prev => prev.map(a => a.id === src ? {...a, balance: a.balance - tx.amount} : a)); 
+                    } 
+                }} 
+                onUpdateBalance={(id, bal) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: bal} : a))} 
+                onComplete={(id) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: 0} : a))} 
+            />;
           case 'zakat': return <ZakatMal accounts={accounts} transactions={transactions} onAddTransaction={(tx) => { setTransactions(prev => [tx, ...prev]); setAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance - tx.amount} : a)); }} />;
           case 'more':
               // ... (Settings Tab Content - Keeping mostly same but referencing user state)

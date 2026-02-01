@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NonProfitAccount, NonProfitTransaction, Account } from '../types';
-import { UserCircle2, Landmark, Plus, X, ArrowDownRight, Pencil, CheckCircle2, AlertCircle, BellRing } from 'lucide-react';
-import { format, endOfMonth, differenceInDays, isSameMonth, parseISO } from 'date-fns';
+import { UserCircle2, Landmark, Plus, X, ArrowDownRight, Pencil, CheckCircle2, AlertCircle, BellRing, Trash2 } from 'lucide-react';
+import { format, endOfMonth, isSameMonth, parseISO } from 'date-fns';
 
 interface NonProfitProps {
   accounts: NonProfitAccount[];
@@ -10,6 +10,7 @@ interface NonProfitProps {
   onAddTransaction: (tx: NonProfitTransaction, sourceMainAccountId?: string) => void;
   onUpdateBalance: (accountId: string, newBalance: number) => void;
   onComplete: (accountId: string) => void;
+  onClearHistory: () => void; // <--- FUNGSI BARU DITAMBAHKAN
   lang?: 'en' | 'id';
 }
 
@@ -20,6 +21,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
     onAddTransaction, 
     onUpdateBalance,
     onComplete,
+    onClearHistory, // <--- DESTRUCTURING PROP
     lang = 'en' 
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -49,7 +51,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'title': lang === 'en' ? 'Hajj & Umrah Fund' : 'Hajj & Umrah Fund',
       'total': lang === 'en' ? 'Total Savings' : 'Total Tabungan',
       'history': lang === 'en' ? 'History' : 'Riwayat',
-      'add': lang === 'en' ? 'Deposit' : 'Setor Dana',
+      'add': lang === 'en' ? 'Deposit' : 'Setor',
       'husband': lang === 'en' ? 'Husband' : 'Suami',
       'wife': lang === 'en' ? 'Wife' : 'Istri',
       'save': lang === 'en' ? 'Save' : 'Simpan',
@@ -58,12 +60,13 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'manual': lang === 'en' ? 'Cash / External' : 'Tunai / Luar',
       'transfer': lang === 'en' ? 'From Main Account' : 'Transfer Akun Utama',
       'edit_balance': lang === 'en' ? 'Update Balance (Revaluation)' : 'Ubah Saldo (Revaluasi Emas)',
-      'complete_hajj': lang === 'en' ? 'Complete Ibadah' : 'Tunaikan Ibadah',
+      'complete_hajj': lang === 'en' ? 'Complete' : 'Tunaikan',
       'complete_desc': lang === 'en' ? 'Funds will be utilized and balance reset to 0.' : 'Dana akan digunakan dan saldo di-reset ke 0.',
       'bismillah': lang === 'en' ? 'Bismillah, Proceed' : 'Bismillah, Tunaikan',
       'insufficient': lang === 'en' ? 'Insufficient Balance' : 'Saldo Tidak Cukup',
       'reminder_title': lang === 'en' ? 'Monthly Deposit Reminder' : 'Pengingat Setoran Bulanan',
       'reminder_desc': lang === 'en' ? 'The month is ending and you haven\'t deposited yet. Keep your Hajj consistency!' : 'Bulan segera berakhir dan Anda belum setor tabungan Haji bulan ini. Yuk istiqomah!',
+      'clear_history': lang === 'en' ? 'Clear History' : 'Hapus Riwayat',
     };
     return dict[key] || key;
   };
@@ -72,25 +75,18 @@ const NonProfit: React.FC<NonProfitProps> = ({
   useEffect(() => {
     const checkMonthlyDeposit = () => {
         const now = new Date();
-        const daysInMonth = endOfMonth(now).getDate();
         const currentDay = now.getDate();
 
-        // Check if we are in the last 7 days of the month (e.g., date > 23 in a 30-day month)
-        // Adjust logic: Alert if current date is > 20 (End of month approaching)
         if (currentDay > 20) {
-            // Check if there is any deposit transaction in the current month
             const hasDeposited = transactions.some(tx => {
                 const txDate = parseISO(tx.date);
-                // Check exact month and year match, and ensure amount > 0 (it's a deposit, not completion)
                 return isSameMonth(txDate, now) && tx.amount > 0;
             });
-
             setShowMonthlyReminder(!hasDeposited);
         } else {
             setShowMonthlyReminder(false);
         }
     };
-
     checkMonthlyDeposit();
   }, [transactions]);
 
@@ -98,8 +94,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
   // --- VALIDATION LOGIC ---
   const selectedSourceAccount = mainAccounts.find(a => a.id === sourceMainAccountId);
   const numericAmount = parseFloat(amount) || 0;
-  
   const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
+
+  const handleOpenDeposit = (accountId: string) => {
+      setSelectedAccountId(accountId);
+      setShowAddModal(true);
+  };
 
   const handleDepositSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,7 +156,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
       {/* HEADER */}
-      {/* Revised Padding: pt-32 for significant top space on all devices. pb-40 to provide overlapping space. */}
       <div className="p-6 pt-32 pb-40 bg-gradient-to-br from-emerald-900 via-[#064e3b] to-black rounded-b-[3rem] shadow-xl relative overflow-hidden text-center">
         <div className="absolute top-0 right-0 p-4 opacity-10">
             <div className="w-32 h-32 bg-black rotate-45 border-4 border-yellow-600/50"></div>
@@ -170,10 +169,8 @@ const NonProfit: React.FC<NonProfitProps> = ({
         </div>
       </div>
 
-      {/* Content pulled up with negative margin. Adjusted to -mt-24 to overlap into the pb-40 space. */}
       <div className="p-4 space-y-6 -mt-24 relative z-20">
         
-        {/* MONTHLY REMINDER ALERT */}
         {showMonthlyReminder && (
             <div className="bg-rose-500/10 border border-rose-500/50 p-4 rounded-2xl shadow-lg flex items-start gap-4 animate-in slide-in-from-top-4 relative z-20 backdrop-blur-md">
                 <div className="p-2 bg-rose-500 rounded-full text-white shrink-0 shadow-lg shadow-rose-900/50 animate-pulse">
@@ -214,33 +211,49 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         <span className="text-[10px] text-amber-500 border border-amber-500/30 px-1.5 rounded bg-amber-500/10">GOLD / IDR</span>
                     </div>
 
-                    <div className="w-full bg-gray-700 h-1.5 rounded-full overflow-hidden mb-4 opacity-50">
+                    <div className="w-full bg-gray-700 h-1.5 rounded-full overflow-hidden mb-6 opacity-50">
                         <div className="bg-emerald-500 h-full" style={{ width: '20%' }}></div>
                     </div>
 
-                    <button 
-                        onClick={() => openCompleteModal(acc)}
-                        disabled={acc.balance <= 0}
-                        className="w-full py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all
-                        bg-gradient-to-r from-gray-900 to-black border border-amber-600/50 text-amber-500 shadow-md hover:shadow-amber-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <Landmark className="w-4 h-4" />
-                        {t('complete_hajj')}
-                    </button>
+                    <div className="flex gap-3">
+                         <button 
+                            onClick={() => handleOpenDeposit(acc.id)}
+                            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 active:scale-95 transition-all"
+                         >
+                            <Plus className="w-5 h-5" />
+                            {t('add')}
+                         </button>
+                         
+                         <button 
+                            onClick={() => openCompleteModal(acc)}
+                            disabled={acc.balance <= 0}
+                            className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all
+                            bg-white/5 border border-white/10 text-gray-400 hover:text-amber-500 hover:border-amber-500/50 hover:bg-amber-500/5
+                            active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Landmark className="w-4 h-4" />
+                            {t('complete_hajj')}
+                        </button>
+                    </div>
                 </div>
             ))}
         </div>
 
-        <button 
-            onClick={() => setShowAddModal(true)}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 transition-all active:scale-95"
-        >
-            <Plus className="w-5 h-5" />
-            {t('add')}
-        </button>
-
         <div className="space-y-3 pb-8">
-            <h3 className="text-gray-400 font-bold text-sm uppercase tracking-wider px-1">{t('history')}</h3>
+            {/* --- HEADER RIWAYAT & TOMBOL DELETE --- */}
+            <div className="flex justify-between items-end px-1">
+                <h3 className="text-gray-400 font-bold text-sm uppercase tracking-wider">{t('history')}</h3>
+                {transactions.length > 0 && (
+                    <button 
+                        onClick={onClearHistory}
+                        className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                        {t('clear_history')}
+                    </button>
+                )}
+            </div>
+
             <div className="bg-surface rounded-xl border border-white/10 overflow-hidden divide-y divide-white/5">
                 {transactions.length === 0 ? (
                     <div className="p-8 text-center text-gray-500 text-sm">No history yet.</div>
