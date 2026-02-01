@@ -39,7 +39,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
   const [sourceType, setSourceType] = useState<'MANUAL' | 'TRANSFER'>('MANUAL');
   const [sourceMainAccountId, setSourceMainAccountId] = useState('');
   
-  // --- NEW STATE: FILTER SUMBER DANA (Suami/Istri) ---
+  // Filter Sumber Dana
   const [sourceOwnerFilter, setSourceOwnerFilter] = useState<AccountOwner>('Husband');
 
   // Edit/Complete State
@@ -100,32 +100,23 @@ const NonProfit: React.FC<NonProfitProps> = ({
   const numericAmount = parseFloat(amount) || 0;
   const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
 
-  // --- LOGIC BARU: OPEN MODAL & AUTO-SET SOURCE FILTER ---
   const handleOpenDeposit = (accountId: string) => {
       setSelectedAccountId(accountId);
-      
       const targetAcc = accounts.find(a => a.id === accountId);
       if (targetAcc) {
-          // 1. Set Filter Sumber Dana sesuai pemilik akun tujuan (Suami -> Suami)
           setSourceOwnerFilter(targetAcc.owner);
-          
-          // 2. Otomatis pilih akun pertama dari kelompok tersebut agar dropdown tidak kosong
           const defaultSource = mainAccounts.find(a => a.owner === targetAcc.owner);
           if (defaultSource) {
               setSourceMainAccountId(defaultSource.id);
           } else {
-              // Fallback jika tidak punya akun, ambil akun pertama apa saja
               setSourceMainAccountId(mainAccounts[0]?.id || '');
           }
       }
-      
       setShowAddModal(true);
   };
 
-  // --- LOGIC BARU: GANTI FILTER SOURCE (MANUAL CLICK) ---
   const handleSourceFilterChange = (owner: AccountOwner) => {
       setSourceOwnerFilter(owner);
-      // Reset pilihan dropdown ke akun pertama di grup baru
       const firstAcc = mainAccounts.find(a => a.owner === owner);
       if (firstAcc) setSourceMainAccountId(firstAcc.id);
   };
@@ -184,33 +175,24 @@ const NonProfit: React.FC<NonProfitProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
-      {/* HEADER */}
-      {/* HAPUS class warna lama: bg-gradient-to-br from-emerald-900 via-[#064e3b] to-black */}
-      {/* GANTI dengan: bg-surface relative overflow-hidden */}
-      <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
+      {/* HEADER dengan Dynamic Blending & Padding Lebih Besar */}
+      <div className="p-6 pt-32 pb-60 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
+         {/* LAYER 1: Dynamic Color Blending */}
+         <div 
+            className="absolute inset-0 opacity-20 mix-blend-hard-light"
+            style={{ background: `linear-gradient(to bottom right, var(--color-primary), transparent)` }}
+         ></div>
         
-        {/* --- LAYER 1: Dynamic Color Blending (Harmonisasi) --- */}
-        {/* Ini kuncinya: Menggunakan var(--color-primary) dengan opacity rendah & blending */}
-        <div 
-            className="absolute inset-0 opacity-30 mix-blend-hard-light"
-            style={{ 
-                background: `linear-gradient(to bottom right, var(--color-primary), transparent)` 
-            }}
-        ></div>
-        
-        {/* --- LAYER 2: Pattern Overlay (Opsional - Biar lebih texture) --- */}
-        <div className="absolute top-0 right-0 p-4 opacity-10 mix-blend-overlay">
+         {/* LAYER 2: Pattern */}
+         <div className="absolute top-0 right-0 p-4 opacity-10 mix-blend-overlay">
             <div className="w-32 h-32 bg-white rotate-45 border-4 border-white/50"></div>
-        </div>
+         </div>
         
-        {/* CONTENT (Kasih relative z-10 biar di atas layer warna) */}
         <div className="relative z-10 mt-2">
             <h1 className="text-xl md:text-2xl font-serif text-white/80 mb-6 uppercase tracking-widest border-b border-white/20 inline-block pb-3">
                 {t('title')}
             </h1>
-            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight drop-shadow-lg">
-                {formatCurrency(totalBalance)}
-            </h2>
+            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight drop-shadow-lg">{formatCurrency(totalBalance)}</h2>
         </div>
       </div>
 
@@ -233,7 +215,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
         <div className="space-y-4">
             {accounts.map(acc => (
                 <div key={acc.id} className="bg-surface p-5 rounded-2xl border border-white/10 shadow-lg relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
+                    <div className="absolute right-0 top-0 w-24 h-24 bg-gradient-to-bl from-white/5 to-transparent rounded-bl-full pointer-events-none"></div>
                     
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
@@ -256,17 +238,22 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         <span className="text-[10px] text-amber-500 border border-amber-500/30 px-1.5 rounded bg-amber-500/10">GOLD / IDR</span>
                     </div>
 
+                    {/* Progress Bar dengan warna Dynamic */}
                     <div className="w-full bg-gray-700 h-1.5 rounded-full overflow-hidden mb-6 opacity-50">
-                        <div className="bg-emerald-500 h-full" style={{ width: '20%' }}></div>
+                        <div className="h-full opacity-80" style={{ width: '20%', backgroundColor: 'var(--color-primary)' }}></div>
                     </div>
 
                     <div className="flex gap-3">
+                         {/* Tombol Deposit dengan Dynamic Color */}
                          <button 
                             onClick={() => handleOpenDeposit(acc.id)}
-                            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 active:scale-95 transition-all"
+                            className="relative flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all overflow-hidden group"
                          >
-                            <Plus className="w-5 h-5" />
-                            {t('add')}
+                            <div className="absolute inset-0 opacity-90 transition-opacity group-hover:opacity-100" style={{ backgroundColor: 'var(--color-primary)' }}></div>
+                            <div className="relative z-10 flex items-center gap-2 text-white">
+                                <Plus className="w-5 h-5" />
+                                {t('add')}
+                            </div>
                          </button>
                          
                          <button 
@@ -309,8 +296,8 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         return (
                             <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors">
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full ${isCompletion ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
-                                        {isCompletion ? <CheckCircle2 className="w-5 h-5 text-amber-500" /> : <ArrowDownRight className="w-5 h-5 text-emerald-500" />}
+                                    <div className={`p-2 rounded-full ${isCompletion ? 'bg-amber-500/10' : 'bg-white/5'}`}>
+                                        {isCompletion ? <CheckCircle2 className="w-5 h-5 text-amber-500" /> : <ArrowDownRight className="w-5 h-5" style={{ color: 'var(--color-primary)' }} />}
                                     </div>
                                     <div>
                                         <div className="text-sm font-medium text-white">{acc?.name}</div>
@@ -320,7 +307,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                                <div className={`${isCompletion ? 'text-gray-400' : 'text-emerald-400'} font-bold text-sm`}>
+                                <div className={`font-bold text-sm ${isCompletion ? 'text-gray-400' : ''}`} style={{ color: isCompletion ? undefined : 'var(--color-primary)' }}>
                                     {isCompletion ? 'COMPLETED' : `+${formatCurrency(tx.amount)}`}
                                 </div>
                             </div>
@@ -349,9 +336,10 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                     onClick={() => setSelectedAccountId(acc.id)}
                                     className={`p-3 rounded-lg border text-sm font-medium transition-all ${
                                         selectedAccountId === acc.id 
-                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
+                                        ? 'bg-white/10 border-white/30 text-white' 
                                         : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10'
                                     }`}
+                                    style={selectedAccountId === acc.id ? { borderColor: 'var(--color-primary)', color: 'var(--color-primary)', backgroundColor: 'rgba(255,255,255,0.05)' } : {}}
                                 >
                                     {acc.name}
                                 </button>
@@ -364,23 +352,23 @@ const NonProfit: React.FC<NonProfitProps> = ({
                              <button
                                 type="button"
                                 onClick={() => setSourceType('MANUAL')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${sourceType === 'MANUAL' ? 'bg-emerald-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${sourceType === 'MANUAL' ? 'text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                style={sourceType === 'MANUAL' ? { backgroundColor: 'var(--color-primary)' } : {}}
                              >
                                 {t('manual')}
                              </button>
                              <button
                                 type="button"
                                 onClick={() => setSourceType('TRANSFER')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${sourceType === 'TRANSFER' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${sourceType === 'TRANSFER' ? 'text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                style={sourceType === 'TRANSFER' ? { backgroundColor: '#3b82f6' } : {}} // Transfer tetap biru agar beda
                              >
                                 {t('transfer')}
                              </button>
                          </div>
                          
-                         {/* --- BAGIAN YANG DIUPDATE: SOURCE ACCOUNT FILTER --- */}
                          {sourceType === 'TRANSFER' && (
                              <div className="animate-in slide-in-from-top-2 space-y-3">
-                                {/* Toggle Filter Suami / Istri */}
                                 <div className="flex bg-white/5 p-1 rounded-lg">
                                      <button
                                         type="button"
@@ -398,7 +386,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                      </button>
                                 </div>
 
-                                {/* Dropdown Akun (Sudah terfilter) */}
                                 <div>
                                     <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">{t('select_source')}</label>
                                     <select 
@@ -415,7 +402,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                                 {acc.name} ({formatCurrency(acc.balance)})
                                             </option>
                                         ))}
-                                        {/* Fallback jika kosong */}
                                         {mainAccounts.filter(a => a.owner === sourceOwnerFilter).length === 0 && (
                                             <option disabled>No accounts found for {sourceOwnerFilter}</option>
                                         )}
@@ -434,12 +420,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
                             className={`w-full bg-[#18181b] border rounded-xl p-4 text-2xl font-bold outline-none text-right transition-colors ${
                                 isInsufficientBalance 
                                 ? 'border-red-500 text-red-500' 
-                                : 'border-white/10 text-white focus:border-emerald-500'
+                                : 'border-white/10 text-white focus:border-white/30'
                             }`}
                             placeholder="0"
                             autoFocus
                         />
-                        {isInsufficientBalance && (
+                         {isInsufficientBalance && (
                             <div className="flex items-center justify-end mt-2 text-red-500 animate-in slide-in-from-top-1">
                                 <AlertCircle className="w-4 h-4 mr-1" />
                                 <span className="text-xs font-medium">
@@ -456,7 +442,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                 type="date"
                                 value={date}
                                 onChange={e => setDate(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-white/30"
                             />
                          </div>
                          <div>
@@ -465,17 +451,20 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                 type="text"
                                 value={notes}
                                 onChange={e => setNotes(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-white/30"
                                 placeholder="Notes..."
                             />
                          </div>
                     </div>
+                    
+                    {/* TOMBOL SAVE (DYNAMIC COLOR) */}
                     <button 
                         type="submit" 
                         disabled={!amount || isInsufficientBalance} 
-                        className="w-full bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 text-white font-bold py-4 rounded-xl mt-4 transition-all"
+                        className="w-full font-bold py-4 rounded-xl mt-4 transition-all text-white relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
-                        {t('save')}
+                         <div className="absolute inset-0 opacity-90 transition-opacity group-hover:opacity-100" style={{ backgroundColor: 'var(--color-primary)' }}></div>
+                         <span className="relative z-10">{t('save')}</span>
                     </button>
                 </form>
             </div>
