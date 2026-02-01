@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
-import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle } from 'lucide-react';
+import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { subDays, parseISO, format } from 'date-fns';
 
 interface ZakatMalProps {
@@ -10,14 +10,47 @@ interface ZakatMalProps {
 }
 
 const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction }) => {
-    const [goldPrice, setGoldPrice] = useState<number>(1000000); // Default 1jt/gram
+    const [goldPrice, setGoldPrice] = useState<number>(1400000); // Default estimasi
+    const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
     
     // Payment Modal State
     const [showPayModal, setShowPayModal] = useState(false);
     const [paymentSourceAccountId, setPaymentSourceAccountId] = useState('');
 
-    // --- 1. Hijri Date Helper ---
+    // --- 1. FETCH LIVE GOLD PRICE (TRICK: Using Public JSON via Proxy) ---
+    const fetchLiveGoldPrice = async () => {
+        setIsFetchingPrice(true);
+        try {
+            // URL ini adalah endpoint publik yang digunakan widget website goldprice.org
+            // Kita gunakan 'allorigins' sebagai proxy untuk menghindari masalah CORS di browser.
+            const response = await fetch('https://api.allorigins.win/raw?url=https://data-asg.goldprice.org/dbXRates/IDR');
+            const data = await response.json();
+            
+            // Data format: { items: [ { xauPrice: 35000000, ... } ] }
+            // xauPrice adalah harga per Ounce (oz). 
+            // 1 Troy Ounce = 31.1035 Gram.
+            if (data.items && data.items.length > 0) {
+                const pricePerOz = data.items[0].xauPrice;
+                const pricePerGram = pricePerOz / 31.1035;
+                
+                // Bulatkan ke ribuan terdekat agar rapi
+                setGoldPrice(Math.round(pricePerGram));
+            }
+        } catch (error) {
+            console.error("Gagal update harga emas:", error);
+            alert("Gagal mengambil harga live. Menggunakan harga terakhir.");
+        } finally {
+            setIsFetchingPrice(false);
+        }
+    };
+
+    // Auto-fetch saat pertama kali buka
+    useEffect(() => {
+        fetchLiveGoldPrice();
+    }, []);
+
+    // --- 2. Hijri Date Helper ---
     const getHijriDateParts = (date: Date) => {
         try {
             const parts = new Intl.DateTimeFormat('en-u-ca-islamic-nu-latn', {
@@ -30,7 +63,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
         } catch (e) { return { d: 1, m: 1, y: 1445, valid: false }; }
     };
 
-    // --- 2. Calculation Logic ---
+    // --- 3. Calculation Logic ---
     const calculationResult = useMemo(() => {
         const NISAB_GRAMS = 85;
         const nisabValue = goldPrice * NISAB_GRAMS;
@@ -66,9 +99,9 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
             reason: 'Assets above Nisab.',
             currentTotal: currentTotalAssets,
             nisabValue,
-            zakatAmount: currentTotalAssets * 0.025, // Menggunakan currentTotal untuk demo simplifikasi
-            minBalanceInYear: minBalanceInHaul, // Di real app ini hasil loop history
-            minBalanceDate: subDays(new Date(), 100), // Contoh tanggal dummy untuk visualisasi
+            zakatAmount: currentTotalAssets * 0.025,
+            minBalanceInYear: minBalanceInHaul,
+            minBalanceDate: subDays(new Date(), 100), 
             haulStartDate, haulStartHijriString
         };
     }, [goldPrice, selectedOwner, accounts, transactions]);
@@ -140,20 +173,37 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                             </button>
                         ))}
                     </div>
+                    
+                    {/* INPUT HARGA EMAS + TOMBOL REFRESH */}
                     <div>
-                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 flex items-center gap-2">Current Gold Price / Gram (IDR)</label>
-                        <div className="relative">
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">Current Gold Price / Gram (IDR)</label>
+                            {/* Tombol Refresh Live */}
+                            <button 
+                                onClick={fetchLiveGoldPrice}
+                                disabled={isFetchingPrice}
+                                className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 transition-all disabled:opacity-50"
+                            >
+                                {isFetchingPrice ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}
+                                {isFetchingPrice ? 'Updating...' : 'Live Update'}
+                            </button>
+                        </div>
+                        
+                        <div className="relative group">
                             <input 
                                 type="number"
                                 value={goldPrice}
                                 onChange={e => setGoldPrice(Number(e.target.value))}
                                 className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-white outline-none focus:border-white/30 transition-colors"
                             />
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-yellow-500/10 p-1.5 rounded-lg">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-yellow-500/10 p-1.5 rounded-lg group-focus-within:bg-yellow-500/20 transition-colors">
                                 <Coins className="w-4 h-4 text-yellow-500" />
                             </div>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-2">* Nisab (85g) = {formatCurrency(goldPrice * 85)}</p>
+                        <p className="text-[10px] text-gray-500 mt-2 flex justify-between">
+                            <span>* Nisab (85g) = {formatCurrency(goldPrice * 85)}</span>
+                            <span className="text-white/20">Source: GoldPrice (Spot)</span>
+                        </p>
                     </div>
                 </div>
 
@@ -191,7 +241,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                     <p className="text-white/60 text-xs uppercase font-bold mb-1">Zakat Amount (2.5%)</p>
                                     <p className="text-3xl font-bold text-yellow-400 drop-shadow-sm">{formatCurrency(calculationResult.zakatAmount)}</p>
                                     
-                                    {/* --- NEW: DETAILED LOWEST BALANCE INFO (MOVED HERE) --- */}
+                                    {/* --- DETAILED LOWEST BALANCE INFO --- */}
                                     <div className="mt-3 p-3 rounded-xl bg-black/20 border border-white/5 flex flex-col gap-1">
                                         <div className="flex justify-between items-center">
                                             <span className="text-[10px] text-white/70 uppercase font-bold">Basis Perhitungan (Terendah)</span>
@@ -204,7 +254,6 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                                             </span>
                                         </div>
                                     </div>
-                                    {/* -------------------------------------------------- */}
                                 </div>
 
                                 <button 
