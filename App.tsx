@@ -9,7 +9,7 @@ import AssetAnalytics, { AnalyticsScope } from './components/AssetAnalytics';
 import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
-import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle } from 'lucide-react';
+import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { subDays, format } from 'date-fns';
 
 // OFFLINE MODE: No external services imported.
@@ -32,6 +32,7 @@ const BG_THEMES = [
 const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
 
 const App = () => {
+    const [showPassword, setShowPassword] = useState(false); // <--- TAMBAHKAN INI
     const [activeTab, setActiveTab] = useState('trans');
     const [isLoading, setIsLoading] = useState(false);
     const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -171,7 +172,7 @@ const App = () => {
     }
   };
 
-  
+
  // 2. USEEFFECT UTAMA (Cek Login & Load Data - DENGAN TIMEOUT PROTECTION)
   useEffect(() => {
     const checkUser = async () => {
