@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
+import GlobalMarketStats from './GlobalMarketStats';
 import { 
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, 
   isWithinInterval, parseISO, format, differenceInDays, addWeeks, subWeeks, 
@@ -346,6 +347,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en' }
           </div>
         </div>
       </div>
+      <GlobalMarketStats />
     </div>
   );
 };
