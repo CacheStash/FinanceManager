@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NonProfitAccount, NonProfitTransaction, Account } from '../types';
+import { NonProfitAccount, NonProfitTransaction, Account, AccountOwner } from '../types';
 import { UserCircle2, Landmark, Plus, X, ArrowDownRight, Pencil, CheckCircle2, AlertCircle, BellRing, Trash2 } from 'lucide-react';
 import { format, endOfMonth, isSameMonth, parseISO } from 'date-fns';
 
@@ -10,7 +10,7 @@ interface NonProfitProps {
   onAddTransaction: (tx: NonProfitTransaction, sourceMainAccountId?: string) => void;
   onUpdateBalance: (accountId: string, newBalance: number) => void;
   onComplete: (accountId: string) => void;
-  onClearHistory: () => void; // <--- FUNGSI BARU DITAMBAHKAN
+  onClearHistory: () => void;
   lang?: 'en' | 'id';
 }
 
@@ -21,7 +21,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
     onAddTransaction, 
     onUpdateBalance,
     onComplete,
-    onClearHistory, // <--- DESTRUCTURING PROP
+    onClearHistory,
     lang = 'en' 
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -37,7 +37,10 @@ const NonProfit: React.FC<NonProfitProps> = ({
   const [notes, setNotes] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
   const [sourceType, setSourceType] = useState<'MANUAL' | 'TRANSFER'>('MANUAL');
-  const [sourceMainAccountId, setSourceMainAccountId] = useState(mainAccounts[0]?.id || '');
+  const [sourceMainAccountId, setSourceMainAccountId] = useState('');
+  
+  // --- NEW STATE: FILTER SUMBER DANA (Suami/Istri) ---
+  const [sourceOwnerFilter, setSourceOwnerFilter] = useState<AccountOwner>('Husband');
 
   // Edit/Complete State
   const [targetAccount, setTargetAccount] = useState<NonProfitAccount | null>(null);
@@ -67,6 +70,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'reminder_title': lang === 'en' ? 'Monthly Deposit Reminder' : 'Pengingat Setoran Bulanan',
       'reminder_desc': lang === 'en' ? 'The month is ending and you haven\'t deposited yet. Keep your Hajj consistency!' : 'Bulan segera berakhir dan Anda belum setor tabungan Haji bulan ini. Yuk istiqomah!',
       'clear_history': lang === 'en' ? 'Clear History' : 'Hapus Riwayat',
+      'select_source': lang === 'en' ? 'Select Source Account' : 'Pilih Akun Sumber',
     };
     return dict[key] || key;
   };
@@ -96,9 +100,34 @@ const NonProfit: React.FC<NonProfitProps> = ({
   const numericAmount = parseFloat(amount) || 0;
   const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
 
+  // --- LOGIC BARU: OPEN MODAL & AUTO-SET SOURCE FILTER ---
   const handleOpenDeposit = (accountId: string) => {
       setSelectedAccountId(accountId);
+      
+      const targetAcc = accounts.find(a => a.id === accountId);
+      if (targetAcc) {
+          // 1. Set Filter Sumber Dana sesuai pemilik akun tujuan (Suami -> Suami)
+          setSourceOwnerFilter(targetAcc.owner);
+          
+          // 2. Otomatis pilih akun pertama dari kelompok tersebut agar dropdown tidak kosong
+          const defaultSource = mainAccounts.find(a => a.owner === targetAcc.owner);
+          if (defaultSource) {
+              setSourceMainAccountId(defaultSource.id);
+          } else {
+              // Fallback jika tidak punya akun, ambil akun pertama apa saja
+              setSourceMainAccountId(mainAccounts[0]?.id || '');
+          }
+      }
+      
       setShowAddModal(true);
+  };
+
+  // --- LOGIC BARU: GANTI FILTER SOURCE (MANUAL CLICK) ---
+  const handleSourceFilterChange = (owner: AccountOwner) => {
+      setSourceOwnerFilter(owner);
+      // Reset pilihan dropdown ke akun pertama di grup baru
+      const firstAcc = mainAccounts.find(a => a.owner === owner);
+      if (firstAcc) setSourceMainAccountId(firstAcc.id);
   };
 
   const handleDepositSubmit = (e: React.FormEvent) => {
@@ -240,7 +269,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
         </div>
 
         <div className="space-y-3 pb-8">
-            {/* --- HEADER RIWAYAT & TOMBOL DELETE --- */}
             <div className="flex justify-between items-end px-1">
                 <h3 className="text-gray-400 font-bold text-sm uppercase tracking-wider">{t('history')}</h3>
                 {transactions.length > 0 && (
@@ -332,21 +360,51 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                 {t('transfer')}
                              </button>
                          </div>
+                         
+                         {/* --- BAGIAN YANG DIUPDATE: SOURCE ACCOUNT FILTER --- */}
                          {sourceType === 'TRANSFER' && (
-                             <div className="animate-in slide-in-from-top-2">
-                                <select 
-                                    value={sourceMainAccountId} 
-                                    onChange={e => setSourceMainAccountId(e.target.value)} 
-                                    className={`w-full bg-surface-light text-white p-3 rounded-xl border outline-none transition-colors ${
-                                        isInsufficientBalance ? 'border-red-500' : 'border-blue-500/30 focus:border-blue-500'
-                                    }`}
-                                >
-                                    {mainAccounts.map(acc => (
-                                        <option key={acc.id} value={acc.id} className="bg-surface">
-                                            {acc.name} ({formatCurrency(acc.balance)})
-                                        </option>
-                                    ))}
-                                </select>
+                             <div className="animate-in slide-in-from-top-2 space-y-3">
+                                {/* Toggle Filter Suami / Istri */}
+                                <div className="flex bg-white/5 p-1 rounded-lg">
+                                     <button
+                                        type="button"
+                                        onClick={() => handleSourceFilterChange('Husband')}
+                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sourceOwnerFilter === 'Husband' ? 'bg-indigo-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                     >
+                                        {t('husband')}
+                                     </button>
+                                     <button
+                                        type="button"
+                                        onClick={() => handleSourceFilterChange('Wife')}
+                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sourceOwnerFilter === 'Wife' ? 'bg-pink-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                     >
+                                        {t('wife')}
+                                     </button>
+                                </div>
+
+                                {/* Dropdown Akun (Sudah terfilter) */}
+                                <div>
+                                    <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">{t('select_source')}</label>
+                                    <select 
+                                        value={sourceMainAccountId} 
+                                        onChange={e => setSourceMainAccountId(e.target.value)} 
+                                        className={`w-full bg-surface-light text-white p-3 rounded-xl border outline-none transition-colors ${
+                                            isInsufficientBalance ? 'border-red-500' : 'border-blue-500/30 focus:border-blue-500'
+                                        }`}
+                                    >
+                                        {mainAccounts
+                                            .filter(a => a.owner === sourceOwnerFilter)
+                                            .map(acc => (
+                                            <option key={acc.id} value={acc.id} className="bg-surface">
+                                                {acc.name} ({formatCurrency(acc.balance)})
+                                            </option>
+                                        ))}
+                                        {/* Fallback jika kosong */}
+                                        {mainAccounts.filter(a => a.owner === sourceOwnerFilter).length === 0 && (
+                                            <option disabled>No accounts found for {sourceOwnerFilter}</option>
+                                        )}
+                                    </select>
+                                </div>
                              </div>
                          )}
                     </div>
