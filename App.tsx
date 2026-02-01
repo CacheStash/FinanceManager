@@ -175,14 +175,14 @@ await loadSettingsFromSupabase(userId);
     const checkUser = async () => {
       try {
           // --- PROTEKSI TIMEOUT (ANTI-STUCK) ---
-          // Kita buat balapan: "Tanya Supabase" vs "Timer 3 Detik"
-          // Siapa yang duluan selesai, dia yang menang.
+          // Kita buat balapan: "Tanya Supabase" vs "Timer"
           
           const sessionPromise = supabase.auth.getSession();
           const timeoutPromise = new Promise((resolve, reject) => {
-              setTimeout(() => reject(new Error("Auth Timeout")), 3000);
+              // UBAH ANGKA INI: Dari 3000 (3 detik) ke 1000 (1 detik)
+              setTimeout(() => reject(new Error("Auth Timeout")), 1000); 
           });
-
+          
           // Mulai Balapan!
           // Jika Supabase macet > 3 detik, timeoutPromise akan melempar Error.
           const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
