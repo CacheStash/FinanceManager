@@ -170,12 +170,24 @@ await loadSettingsFromSupabase(userId);
     setIsLoading(false);
   };
 
-  // 2. USEEFFECT UTAMA (Cek Login & Load Data)
+ // 2. USEEFFECT UTAMA (Cek Login & Load Data - DENGAN TIMEOUT PROTECTION)
   useEffect(() => {
     const checkUser = async () => {
       try {
-          const { data: { session } } = await supabase.auth.getSession();
+          // --- PROTEKSI TIMEOUT (ANTI-STUCK) ---
+          // Kita buat balapan: "Tanya Supabase" vs "Timer 3 Detik"
+          // Siapa yang duluan selesai, dia yang menang.
           
+          const sessionPromise = supabase.auth.getSession();
+          const timeoutPromise = new Promise((resolve, reject) => {
+              setTimeout(() => reject(new Error("Auth Timeout")), 3000);
+          });
+
+          // Mulai Balapan!
+          // Jika Supabase macet > 3 detik, timeoutPromise akan melempar Error.
+          const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+          
+          // --- LOGIKA NORMAL ---
           if (session?.user) {
             setUser({
                 id: session.user.id,
@@ -183,16 +195,24 @@ await loadSettingsFromSupabase(userId);
                 email: session.user.email || ''
             });
 
-            // PENTING: Pakai 'await' agar data selesai diambil dulu sebelum lanjut
+            // Load data dari server
             await loadDataFromSupabase(session.user.id);
           } else {
-             // Jika tidak login, kita anggap data sudah "loaded" (kosong/lokal)
+             // Tidak ada session (Logout)
              setIsDataLoaded(true); 
           }
+
       } catch (error) {
-          console.error("Auth check failed", error);
+          // --- JIKA TIMEOUT / ERROR TERJADI ---
+          console.warn("Auth check terlalu lama atau gagal, memaksa masuk mode Guest.", error);
+          
+          // Paksa aplikasi jalan terus (anggap sebagai Guest / Logout)
+          // Daripada user stuck di loading screen selamanya.
+          setUser(null);
+          setIsDataLoaded(true);
+
       } finally {
-          // PENTING: Matikan loading screen agar aplikasi terbuka
+          // Apapun yang terjadi (Sukses / Error / Timeout), Loading HARUS mati.
           setIsAuthLoading(false); 
           setIsLoading(false);
       }
@@ -200,7 +220,7 @@ await loadSettingsFromSupabase(userId);
 
     checkUser();
 
-    // Listener Login/Logout
+    // Listener Login/Logout (Tidak perlu timeout karena trigger user action)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           setUser({
@@ -211,17 +231,12 @@ await loadSettingsFromSupabase(userId);
           await loadDataFromSupabase(session.user.id);
         } else {
           setUser(null);
-          // Jangan kosongkan data jika logout, biarkan data lokal tetap ada (opsional)
-          // Atau kosongkan jika ingin strict security:
-          // setAccounts([]); 
-          // setTransactions([]);
         }
-        setIsAuthLoading(false); // Pastikan loading mati saat status berubah
+        setIsAuthLoading(false); 
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-  
+  }, []); 
  
 // --- B. AUTO-SAVE SETTINGS (DEBOUNCE 2 DETIK) ---
 useEffect(() => {
