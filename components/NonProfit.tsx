@@ -127,7 +127,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
     
     onAddTransaction({
         id: Math.random().toString(36).substr(2, 9),
-        date: new Date(date).toISOString(),
+        date: new Date().toISOString(), // <--- AUTO DATE NOW
         amount: parseFloat(amount),
         accountId: selectedAccountId,
         notes: notes + (sourceType === 'TRANSFER' ? ' (Transfer)' : '')
@@ -410,10 +410,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
                              </div>
                          )}
                     </div>
+                    {/* BAGIAN AMOUNT (Update inputMode) */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
                         <input 
                             type="number"
+                            inputMode="decimal" // <--- Keyboard Angka
                             min="0"
                             value={amount}
                             onChange={e => setAmount(e.target.value)}
@@ -435,26 +437,16 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                         <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Date</label>
-                            <input 
-                                type="date"
-                                value={date}
-                                onChange={e => setDate(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-white/30"
-                            />
-                         </div>
-                         <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
-                            <input 
-                                type="text"
-                                value={notes}
-                                onChange={e => setNotes(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-white/30"
-                                placeholder="Notes..."
-                            />
-                         </div>
+                    {/* BAGIAN NOTE (Date dihapus, Note jadi full width) */}
+                    <div>
+                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
+                        <input 
+                            type="text"
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-white/30"
+                            placeholder="Notes..."
+                        />
                     </div>
                     
                     {/* TOMBOL SAVE (DYNAMIC COLOR) */}

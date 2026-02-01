@@ -32,6 +32,18 @@ const BG_THEMES = [
 const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
 
 const App = () => {
+
+
+    // ... state lainnya ...
+  
+  // --- ADD ACCOUNT MODAL STATE (NEW) ---
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccOwner, setNewAccOwner] = useState<AccountOwner>('Husband');
+  const [newAccBalance, setNewAccBalance] = useState(''); // String agar bisa kosong/0
+
+  // ... ref refs ...
+
     const [showPassword, setShowPassword] = useState(false); // <--- TAMBAHKAN INI
     const [activeTab, setActiveTab] = useState('trans');
     const [isLoading, setIsLoading] = useState(false);
@@ -729,7 +741,18 @@ const handleDeleteTransaction = async (txId: string) => {
   };
   
   const onAddPress = () => {
-      setNewTxDate(format(new Date(), 'yyyy-MM-dd'));
+      setNewTxDate(format(new Date(), 'yyyy-MM-dd')); // Reset Tanggal
+      
+      // LOGIC BARU: Auto-Select Account
+      if (selectedAccountForDetail) {
+          setNewTxAccountId(selectedAccountForDetail.id);
+          // Otomatis set filter owner biar dropdown-nya sesuai
+          setNewTxOwnerFilter(selectedAccountForDetail.owner);
+      } else {
+          setNewTxAccountId(''); // Reset jika di halaman depan
+          setNewTxOwnerFilter('All');
+      }
+
       setShowTransactionModal(true);
   };
 
@@ -848,47 +871,57 @@ const handleSubmitTransaction = async () => {
   };
 
 // --- FUNGSI TAMBAH AKUN BARU (SUPABASE LINKED) ---
-const handleCreateAccount = async () => {
-    // 1. Minta nama akun (seperti sebelumnya)
-    const name = prompt("Account Name:");
-    if(!name) return;
+// 1. Tombol Add Account hanya membuka modal
+const handleOpenAddAccountModal = () => {
+    setNewAccName('');
+    setNewAccOwner('Husband');
+    setNewAccBalance('');
+    setShowAddAccountModal(true);
+};
 
-    // 2. Siapkan data akun baru
+// 2. Fungsi Submit Akun Baru (Lengkap)
+const handleSubmitNewAccount = async () => {
+    if (!newAccName.trim()) {
+        alert("Account name is required");
+        return;
+    }
+
+    const initialBalance = parseFloat(newAccBalance) || 0; // Opsional, default 0
+
     const newAcc: Account = {
-        id: `acc_${Date.now()}`, // ID Unik
-        name,
-        group: 'Bank Accounts', // Default group
-        balance: 0,
+        id: `acc_${Date.now()}`,
+        name: newAccName,
+        group: 'Bank Accounts', // Default group (bisa diedit nanti)
+        balance: initialBalance,
         currency: 'IDR',
         includeInTotals: true,
-        owner: 'Husband' // Default owner (bisa diedit nanti)
+        owner: newAccOwner
     };
 
-    // 3. Simpan ke Supabase (Hanya jika user sedang Login)
+    // Simpan ke Supabase (Jika Login)
     if (user && user.id) {
          const dbAccount = {
              id: newAcc.id,
              user_id: user.id,
              name: newAcc.name,
-             "group": newAcc.group, // Pakai kutip karena 'group' kata kunci SQL
+             "group": newAcc.group,
              balance: newAcc.balance,
              currency: newAcc.currency,
              owner: newAcc.owner
          };
 
-         const { error } = await supabase
-             .from('accounts')
-             .insert([dbAccount]);
-
+         const { error } = await supabase.from('accounts').insert([dbAccount]);
          if (error) {
-             alert("Gagal simpan ke database: " + error.message);
-             return; // Stop jika gagal simpan online
+             alert("Gagal simpan online: " + error.message);
+             return;
          }
     }
 
-    // 4. Update Tampilan di Aplikasi (Lokal)
+    // Update Lokal
     setAccounts(prev => [...prev, newAcc]);
+    setShowAddAccountModal(false);
 };
+
 
   // --- ACCOUNT TAB RENDER LOGIC ---
   const renderAccountsTab = () => {
@@ -1046,7 +1079,8 @@ const handleCreateAccount = async () => {
                   )}
               </div>
 
-              <button onClick={handleCreateAccount} className="w-full py-4 rounded-xl border-2 border-dashed border-white/10 text-gray-400 hover:text-white hover:border-white/30 flex items-center justify-center gap-2">
+              // Cari tombol ini di renderAccountsTab:
+<button onClick={handleOpenAddAccountModal} className="..."> {/* GANTI handleCreateAccount JADI handleOpenAddAccountModal */}
     <Plus className="w-5 h-5"/> Add Account
 </button>
           </div>
@@ -1405,7 +1439,7 @@ const handleCreateAccount = async () => {
         )}
 
 
-        
+
         {/* --- EDIT ACCOUNT MODAL --- */}
         {showEditAccountModal && editingAccount && (
             <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
@@ -1456,10 +1490,12 @@ const handleCreateAccount = async () => {
                                 <option value="Investments">Investment</option>
                             </select>
                         </div>
+                        {/* Di dalam Edit Account Modal */}
                         <div>
                             <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Current Balance</label>
                             <input 
-                                type="number"
+                                type="number"         // <--- Tipe Number
+                                inputMode="decimal"   // <--- Keyboard HP Angka
                                 value={editingAccount.balance}
                                 onChange={e => setEditingAccount({...editingAccount, balance: parseFloat(e.target.value) || 0})}
                                 className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg"
@@ -1561,6 +1597,73 @@ const handleCreateAccount = async () => {
                         </button>
                     </div>
                     <button onClick={() => setShowAuthModal(false)} className="mt-4 text-xs text-gray-600 hover:text-gray-400">Cancel</button>
+                </div>
+            </div>
+        )}
+
+        {/* --- ADD ACCOUNT MODAL (NEW) --- */}
+        {showAddAccountModal && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white">Create Account</h3>
+                        <button onClick={() => setShowAddAccountModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        {/* Nama Akun */}
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label>
+                            <input 
+                                type="text"
+                                value={newAccName}
+                                onChange={e => setNewAccName(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
+                                placeholder="e.g. BCA Tabungan"
+                                autoFocus
+                            />
+                        </div>
+
+                        {/* Owner Selection */}
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label>
+                            <div className="flex bg-white/5 p-1 rounded-lg">
+                                {(['Husband', 'Wife'] as const).map(role => (
+                                    <button
+                                        key={role}
+                                        onClick={() => setNewAccOwner(role)}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+                                            newAccOwner === role
+                                            ? (role === 'Husband' ? 'bg-indigo-600 text-white' : 'bg-pink-600 text-white')
+                                            : 'text-gray-400 hover:text-white'
+                                        }`}
+                                    >
+                                        {role === 'Husband' ? 'Suami' : 'Istri'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Initial Balance (Optional) */}
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Initial Balance (Optional)</label>
+                            <input 
+                                type="number"        // Tipe Number
+                                inputMode="decimal"  // Keyboard HP Angka
+                                value={newAccBalance}
+                                onChange={e => setNewAccBalance(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg"
+                                placeholder="0"
+                            />
+                        </div>
+                        
+                        <button 
+                            onClick={handleSubmitNewAccount}
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-4 shadow-lg shadow-emerald-900/20"
+                        >
+                            Create Account
+                        </button>
+                    </div>
                 </div>
             </div>
         )}
