@@ -1542,7 +1542,8 @@ const handleSubmitNewAccount = async () => {
 
   // --- RENDERING ---
 
-  // Taruh di sini (di atas return utama)
+  // ... (kode logika di atas biarkan saja) ...
+
   if (isAuthLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#18181b] text-white flex-col gap-4">
@@ -1552,9 +1553,9 @@ const handleSubmitNewAccount = async () => {
     );
   }
 
+  // === GANTI DARI SINI SAMPAI PALING BAWAH FILE ===
   return (
     <Layout 
-      // ... props layout tetap sama ...
       activeTab={activeTab} 
       setActiveTab={handleTabChange} 
       onAddPress={onAddPress}
@@ -1564,7 +1565,7 @@ const handleSubmitNewAccount = async () => {
       lang={lang}
       setLang={setLang}
     >
-        {/* === 1. LAYAR PENGUNCI (PRIORITAS TERTINGGI) === */}
+        {/* 1. LOCK SCREEN (Layer Paling Atas) */}
         {isLocked && appPin && (
             <LockScreen 
                 correctPin={appPin} 
@@ -1573,48 +1574,341 @@ const handleSubmitNewAccount = async () => {
             />
         )}
 
+        {/* 2. KONTEN UTAMA (Tabs) */}
         {renderContent()}
 
-        {/* ... Loading Overlay & Modal Transaksi (Biarkan kode lama) ... */}
 
-        {/* === 2. MODAL SETUP PIN (UNTUK MEMBUAT PIN BARU) === */}
+        {/* ========================================= */}
+        {/* MULAI BAGIAN MODAL YANG HILANG       */}
+        {/* ========================================= */}
+
+        {/* 3. MODAL: ADD NEW ACCOUNT */}
+        {showAddAccountModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-white">Add New Account</h3>
+                        <button onClick={() => setShowAddAccountModal(false)}><X className="w-5 h-5 text-gray-400"/></button>
+                    </div>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label>
+                            <input type="text" value={newAccName} onChange={e => setNewAccName(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary" placeholder="e.g. BCA Main" autoFocus />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label>
+                            <div className="flex bg-white/5 p-1 rounded-lg">
+                                <button onClick={() => setNewAccOwner('Husband')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newAccOwner === 'Husband' ? 'bg-indigo-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Husband</button>
+                                <button onClick={() => setNewAccOwner('Wife')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newAccOwner === 'Wife' ? 'bg-pink-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Wife</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Initial Balance</label>
+                            <CurrencyInput 
+                                value={newAccBalance}
+                                onChange={val => setNewAccBalance(val)}
+                                currency={currency}
+                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
+                                placeholder="0"
+                            />
+                        </div>
+                        <button onClick={handleSubmitNewAccount} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg mt-2">Create Account</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 4. MODAL: EDIT ACCOUNT */}
+        {showEditAccountModal && editingAccount && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white">Edit Account</h3>
+                        <button onClick={() => setShowEditAccountModal(false)}><X className="w-5 h-5 text-gray-400"/></button>
+                    </div>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label>
+                            <input 
+                                type="text" 
+                                value={editingAccount.name} 
+                                onChange={e => setEditingAccount({...editingAccount, name: e.target.value})} 
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Current Balance</label>
+                            <CurrencyInput 
+                                value={editingAccount.balance}
+                                onChange={val => setEditingAccount({...editingAccount, balance: parseFloat(val) || 0})}
+                                currency={currency}
+                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
+                            />
+                            <p className="text-[10px] text-gray-500 mt-1 ml-1">* Changing balance creates an Adjustment transaction.</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            <button onClick={handleSaveAccountEdit} className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2"><Save className="w-4 h-4"/> Save</button>
+                            <button onClick={() => {
+                                if(confirm("Delete this account and all its transactions?")) {
+                                    // Logic hapus akun (simple version)
+                                    setAccounts(prev => prev.filter(a => a.id !== editingAccount.id));
+                                    setTransactions(prev => prev.filter(t => t.accountId !== editingAccount.id && t.toAccountId !== editingAccount.id));
+                                    setShowEditAccountModal(false);
+                                }
+                            }} className="py-3 bg-red-600/20 hover:bg-red-600 hover:text-white text-red-500 font-bold rounded-xl border border-red-600/30 flex items-center justify-center gap-2 transition-colors"><Trash2 className="w-4 h-4"/> Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 5. MODAL: ADD TRANSACTION (FLOATING CENTER STYLE) */}
+        {showTransactionModal && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+                <div className="w-full max-w-md bg-surface rounded-2xl border border-white/10 overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+                    
+                    {/* Header Modal */}
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
+                        <h3 className="font-bold text-white text-lg">
+                            {showCategoryManager ? 'Manage Categories' : 'New Transaction'}
+                        </h3>
+                        <button onClick={() => { setShowTransactionModal(false); setShowCategoryManager(false); }}><X className="w-6 h-6 text-gray-400" /></button>
+                    </div>
+                    
+                    {/* === MODE 1: CATEGORY MANAGER === */}
+                    {showCategoryManager ? (
+                        <div className="overflow-y-auto p-6 space-y-4 flex-1">
+                             <div className="flex items-center justify-between mb-2">
+                                 <p className="text-xs text-gray-400">Add or edit your transaction categories.</p>
+                                 <button onClick={() => setShowCategoryManager(false)} className="text-xs font-bold text-blue-400 border border-blue-400/30 px-3 py-1 rounded-full">Done</button>
+                             </div>
+                             
+                             <div className="flex gap-2">
+                                 <input 
+                                     type="text" 
+                                     value={newCategoryName} 
+                                     onChange={e => setNewCategoryName(e.target.value)}
+                                     placeholder="New Category Name..."
+                                     className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
+                                     onKeyDown={(e) => { if(e.key === 'Enter') handleAddCategory(); }}
+                                 />
+                                 <button onClick={handleAddCategory} className="bg-emerald-600 hover:bg-emerald-700 px-4 rounded-xl text-white shadow-lg"><Plus className="w-5 h-5"/></button>
+                             </div>
+
+                             <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                 {categories.map((cat, idx) => (
+                                     <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 group hover:border-white/20 transition-colors">
+                                         {editingCategory?.idx === idx ? (
+                                             <div className="flex items-center gap-2 flex-1">
+                                                 <input 
+                                                     value={editingCategory.name} 
+                                                     onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
+                                                     className="bg-black/40 text-white rounded-lg p-2 flex-1 outline-none border border-blue-500 text-sm"
+                                                     autoFocus
+                                                 />
+                                                 <button onClick={handleUpdateCategory} className="p-2 bg-blue-600 rounded-lg text-white"><Save className="w-4 h-4"/></button>
+                                             </div>
+                                         ) : (
+                                             <span className="text-sm text-gray-200 font-medium pl-1">{cat}</span>
+                                         )}
+                                         
+                                         {editingCategory?.idx !== idx && (
+                                            <div className="flex gap-1">
+                                                <button onClick={() => setEditingCategory({idx, name: cat})} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg"><Edit3 className="w-4 h-4"/></button>
+                                                <button onClick={() => handleDeleteCategory(cat)} className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                         )}
+                                     </div>
+                                 ))}
+                             </div>
+                        </div>
+                    ) : (
+                        /* === MODE 2: FORM TRANSAKSI === */
+                        <div className="overflow-y-auto p-6 space-y-5">
+                            {/* Type Toggle */}
+                            <div className="flex bg-white/5 p-1 rounded-xl">
+                                <button type="button" onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
+                                    <ArrowUpRight className="w-4 h-4"/> Expense
+                                </button>
+                                <button type="button" onClick={() => setNewTxType('INCOME')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'INCOME' ? 'bg-emerald-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
+                                    <ArrowDownRight className="w-4 h-4"/> Income
+                                </button>
+                                <button type="button" onClick={() => setNewTxType('TRANSFER')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'TRANSFER' ? 'bg-blue-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
+                                    <ArrowRightLeft className="w-4 h-4"/> Transfer
+                                </button>
+                            </div>
+
+                            {/* Amount Input (Fixed Keypad) */}
+                            <div>
+                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
+                                <CurrencyInput 
+                                    value={newTxAmount}
+                                    onChange={val => setNewTxAmount(val)}
+                                    currency={currency}
+                                    className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600"
+                                    placeholder="0"
+                                    autoFocus
+                                />
+                            </div>
+
+                            {/* Accounts Selection */}
+                            <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-xs text-gray-400 uppercase font-bold block">{newTxType === 'TRANSFER' ? 'From Account' : 'Account'}</label>
+                                        <div className="flex bg-white/5 p-0.5 rounded-lg">
+                                            {(['All', 'Husband', 'Wife'] as const).map(role => (
+                                                <button key={role} type="button" onClick={() => setNewTxOwnerFilter(role)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${newTxOwnerFilter === role ? 'bg-gray-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{role === 'All' ? 'All' : role === 'Husband' ? 'Suami' : 'Istri'}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <select value={newTxAccountId} onChange={e => setNewTxAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
+                                        <option value="" disabled>Select Account</option>
+                                        {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).map(acc => (
+                                            <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {newTxType === 'TRANSFER' && (
+                                    <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">To Account</label>
+                                        <select value={newTxToAccountId} onChange={e => setNewTxToAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
+                                            <option value="" disabled>Select Destination</option>
+                                            {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).filter(a => a.id !== newTxAccountId).map(acc => (
+                                                <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Category with Gear Icon */}
+                            {newTxType !== 'TRANSFER' && (
+                                <div>
+                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
+                                    <div className="flex gap-2">
+                                        <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
+                                            {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                                        </select>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowCategoryManager(true)} 
+                                            className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors border border-white/5"
+                                        >
+                                            <Settings className="w-5 h-5"/>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
+                                <input 
+                                    type="text"
+                                    value={newTxNotes}
+                                    onChange={e => setNewTxNotes(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
+                                    placeholder="Description (Optional)..."
+                                />
+                                <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date set to now automatically.</p>
+                            </div>
+
+                            <button 
+                                onClick={handleSubmitTransaction}
+                                className={`w-full font-bold py-3.5 rounded-xl mt-4 transition-all text-white shadow-lg ${
+                                    newTxType === 'EXPENSE' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-900/20' :
+                                    newTxType === 'INCOME' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20' :
+                                    'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'
+                                }`}
+                            >
+                                Save Transaction
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* 6. MODAL: PIN SETUP */}
         {showPinSetup && (
             <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
                 <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-white">Buat PIN Aplikasi</h3>
+                        <h3 className="text-lg font-bold text-white">Create App PIN</h3>
                         <button onClick={() => setShowPinSetup(false)}><X className="w-5 h-5 text-gray-400"/></button>
                     </div>
-                    
-                    <p className="text-sm text-gray-400 text-center mb-6">
-                        Buat 6 digit PIN untuk mengamankan data keuangan Anda. PIN ini akan tersinkronisasi ke semua perangkat.
-                    </p>
-                    
+                    <p className="text-sm text-gray-400 text-center mb-6">Create a 6-digit PIN to secure this device.</p>
                     <div className="flex justify-center mb-6">
                         <input 
                             type="text" 
                             inputMode="numeric"
                             maxLength={6}
                             value={newPinInput}
-                            onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))} // Hanya angka
+                            onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
                             className="bg-black/50 border border-emerald-500/50 text-white text-3xl font-bold tracking-[0.5em] text-center w-full py-4 rounded-xl outline-none focus:border-emerald-500"
                             placeholder="••••••"
                             autoFocus
                         />
                     </div>
-
                     <button 
                         onClick={handleCreatePin}
                         disabled={newPinInput.length !== 6}
                         className="w-full py-3 bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all"
                     >
-                        Simpan PIN
+                        Save PIN
                     </button>
                 </div>
             </div>
         )}
-        
-        {/* ... Modal Auth (Biarkan kode lama) ... */}
+
+        {/* 7. MODAL: AUTH / LOGIN */}
+        {showAuthModal && (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
+                   {/* ... Isi Auth Modal yang lama (Singkat saja karena tidak berubah) ... */}
+                   <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white">{authMode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}</h3>
+                        <button onClick={() => setShowAuthModal(false)}><X className="w-6 h-6 text-gray-400" /></button>
+                    </div>
+                    {authError && <div className="p-3 mb-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-xs flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>{authError}</div>}
+                    
+                    <div className="space-y-4">
+                        {authMode === 'REGISTER' && (
+                            <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3">
+                                <UserCircle2 className="text-gray-400 w-5 h-5" />
+                                <input type="text" placeholder="Full Name" value={regName} onChange={e => setRegName(e.target.value)} className="bg-transparent text-white outline-none w-full text-sm" />
+                            </div>
+                        )}
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3">
+                            <UserCircle2 className="text-gray-400 w-5 h-5" />
+                            <input type="email" placeholder="Email Address" value={regEmail} onChange={e => setRegEmail(e.target.value)} className="bg-transparent text-white outline-none w-full text-sm" />
+                        </div>
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3">
+                            <div onClick={() => setShowPassword(!showPassword)} className="cursor-pointer">{showPassword ? <EyeOff className="text-gray-400 w-5 h-5"/> : <Eye className="text-gray-400 w-5 h-5"/>}</div>
+                            <input type={showPassword ? "text" : "password"} placeholder="Password" value={regPass} onChange={e => setRegPass(e.target.value)} className="bg-transparent text-white outline-none w-full text-sm" />
+                        </div>
+
+                        {authMode === 'LOGIN' ? (
+                            <button onClick={handleLocalLogin} disabled={isLoading} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 mt-2">
+                                {isLoading ? <Loader2 className="animate-spin"/> : <LogIn className="w-4 h-4"/>} Login
+                            </button>
+                        ) : (
+                            <button onClick={handleRegister} disabled={isLoading} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 mt-2">
+                                {isLoading ? <Loader2 className="animate-spin"/> : <UserPlus className="w-4 h-4"/>} Register
+                            </button>
+                        )}
+                    </div>
+                    <div className="mt-6 text-center">
+                        <p className="text-xs text-gray-400">
+                            {authMode === 'LOGIN' ? "Don't have an account?" : "Already have an account?"} 
+                            <button onClick={() => { setAuthMode(authMode === 'LOGIN' ? 'REGISTER' : 'LOGIN'); setAuthError(''); }} className="ml-1 text-emerald-400 font-bold hover:underline">
+                                {authMode === 'LOGIN' ? 'Sign Up' : 'Log In'}
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        )}
 
     </Layout>
   );
