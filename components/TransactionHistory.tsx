@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Search, X } from 'lucide-react'; 
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Search, X, Trash2 } from 'lucide-react'; 
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
@@ -13,11 +13,12 @@ interface TransactionHistoryProps {
   accounts: Account[];
   lang?: 'en' | 'id';
   onSelectAccount?: (account: Account) => void;
+  onDelete?: (id: string) => void; 
 }
 
 type DateRange = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'LIFETIME' | 'CUSTOM';
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount, onDelete }) => {
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
   const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
   const [cursorDate, setCursorDate] = useState(new Date()); 
@@ -32,7 +33,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
   useEffect(() => { setCursorDate(new Date()); }, [dateRange]);
 
-  // Focus input saat search dibuka
   useEffect(() => {
       if (showSearch && searchInputRef.current) {
           searchInputRef.current.focus();
@@ -86,18 +86,14 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-        // 1. Owner Filter
         let ownerMatch = true;
         if (ownerFilter !== 'All') {
             const account = accounts.find(a => a.id === tx.accountId);
             ownerMatch = account?.owner === ownerFilter;
         }
-
-        // 2. Date Filter
         const txDate = parseISO(tx.date);
         const dateMatch = isWithinInterval(txDate, { start, end });
 
-        // 3. Search Filter (Category, Notes, Amount)
         let searchMatch = true;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -140,7 +136,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
     <div className="bg-surface rounded-2xl shadow-sm border border-white/10 overflow-hidden flex flex-col h-full transition-colors duration-300">
       <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
         
-        {/* --- 1. HEADER & SEARCH --- */}
+        {/* HEADER & SEARCH */}
         <div className="flex justify-between items-center h-8">
              {showSearch ? (
                  <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-10 duration-200">
@@ -155,51 +151,26 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                             className="w-full bg-white/10 border border-white/10 rounded-lg py-1.5 pl-9 pr-3 text-sm text-white outline-none focus:border-primary"
                         />
                      </div>
-                     <button 
-                        onClick={() => { setShowSearch(false); setSearchQuery(''); }}
-                        className="p-1.5 hover:bg-white/10 rounded-full text-gray-400"
-                     >
-                         <X className="w-5 h-5" />
-                     </button>
+                     <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} className="p-1.5 hover:bg-white/10 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
                  </div>
              ) : (
                  <>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        {lang === 'en' ? 'Transactions' : 'Transaksi'}
-                    </h2>
-                    <button 
-                        onClick={() => setShowSearch(true)}
-                        className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors"
-                    >
-                        <Search className="w-5 h-5" />
-                    </button>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">{lang === 'en' ? 'Transactions' : 'Transaksi'}</h2>
+                    <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors"><Search className="w-5 h-5" /></button>
                  </>
              )}
         </div>
 
         <div className="flex flex-col gap-3">
-            {/* Owner Filter */}
             <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full">
                  {(['All', 'Husband', 'Wife'] as const).map(filter => (
                      <button key={filter} onClick={() => setOwnerFilter(filter)} className={`flex-1 py-1.5 rounded-md transition-all ${ownerFilter === filter ? 'bg-primary text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{t(filter)}</button>
                  ))}
             </div>
 
-            {/* --- 2. DATE RANGE BUTTONS (AUTO FULL WIDTH) --- */}
-            {/* Ubah container jadi flex dan w-full, tombol jadi flex-1 */}
             <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full gap-1 overflow-x-auto">
                 {(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'LIFETIME', 'CUSTOM'] as DateRange[]).map(r => (
-                    <button 
-                        key={r} 
-                        onClick={() => setDateRange(r)} 
-                        className={`flex-1 px-1 py-1.5 rounded-md transition-all whitespace-nowrap text-[10px] sm:text-xs ${
-                            dateRange === r 
-                            ? 'bg-white/10 text-white shadow' 
-                            : 'text-gray-500 hover:text-gray-300'
-                        }`}
-                    >
-                        {t(r)}
-                    </button>
+                    <button key={r} onClick={() => setDateRange(r)} className={`flex-1 px-1 py-1.5 rounded-md transition-all whitespace-nowrap text-[10px] sm:text-xs ${dateRange === r ? 'bg-white/10 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{t(r)}</button>
                 ))}
             </div>
 
@@ -220,33 +191,19 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
-        {/* --- 3. SUMMARY TEXT CENTERED --- */}
         <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
-            <div className="flex flex-col items-center text-center">
-                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span>
-                <span className="text-sm font-bold text-emerald-400 truncate w-full">{formatCurrency(summary.income)}</span>
-            </div>
-            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
-                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span>
-                <span className="text-sm font-bold text-rose-400 truncate w-full">{formatCurrency(summary.expense)}</span>
-            </div>
-            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
-                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span>
-                <span className={`text-sm font-bold truncate w-full ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-                    {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
-                </span>
-            </div>
+            <div className="flex flex-col items-center text-center"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span><span className="text-xs font-bold text-emerald-400 truncate w-full">{formatCurrency(summary.income)}</span></div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span><span className="text-xs font-bold text-rose-400 truncate w-full">{formatCurrency(summary.expense)}</span></div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span><span className={`text-xs font-bold truncate w-full ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</span></div>
         </div>
       </div>
       
-      {/* --- TRANSACTION LIST --- */}
+      {/* TRANSACTION LIST (COMPACT TEXT-XS) */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface transition-colors duration-300">
         {filteredTransactions.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
                {searchQuery ? <Search className="w-8 h-8 opacity-20" /> : <Calendar className="w-8 h-8 opacity-20" />}
-               <span className="text-xs">
-                   {searchQuery ? (lang === 'en' ? 'No results found' : 'Tidak ada hasil') : (lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi')}
-               </span>
+               <span className="text-xs">{searchQuery ? (lang === 'en' ? 'No results found' : 'Tidak ada hasil') : (lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi')}</span>
            </div>
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
@@ -272,16 +229,16 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                     className="relative p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
                     onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
                 >
-                {/* LEFT: Icon & Text */}
                 <div className="flex items-center gap-4 overflow-hidden">
                     <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
                         {getIcon(tx.type, tx.category)}
                     </div>
                     <div className="overflow-hidden min-w-0">
-                        <p className="font-medium text-gray-200 truncate pr-2">
+                        {/* TITLE: TEXT-XS FONT-BOLD */}
+                        <p className="text-xs font-bold text-gray-200 truncate pr-2">
                             {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
                         </p>
-                        <div className="flex items-center text-xs text-gray-500 gap-2 flex-wrap">
+                        <div className="flex items-center text-[10px] text-gray-500 gap-2 flex-wrap">
                             <span>{format(new Date(tx.date), 'dd MMM yyyy')}</span>
                             <span className="hidden sm:inline">•</span>
                             <span className="flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
@@ -296,14 +253,26 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                     </div>
                 </div>
                 
-                {/* RIGHT: Amount (Absolute Clean) */}
+                {/* AMOUNT: TEXT-XS FONT-BOLD */}
                 <div className="text-right shrink-0">
-                    <p className={`font-bold whitespace-nowrap ${amountColor}`}>
+                    <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
                         {sign}{formatCurrency(tx.amount)}
                     </p>
-                    {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
+                    {tx.notes && !isAdjustment && <p className="text-[10px] text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
                 </div>
                 
+                {onDelete && (
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation(); 
+                            onDelete(tx.id);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-red-600/90 text-white rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0"
+                        title="Delete Transaction"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                )}
                 </div>
           )})
         )}

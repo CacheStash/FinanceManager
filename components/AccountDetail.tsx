@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction } from '../types';
-import { ArrowLeft, Edit2, BarChart3, ChevronLeft, ChevronRight, Calendar, Wrench, ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, BarChart3, Edit2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Wrench, ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, subDays, subWeeks, subMonths, subYears, addDays, addWeeks, addMonths, addYears } from 'date-fns';
 
 interface AccountDetailProps {
@@ -8,7 +8,7 @@ interface AccountDetailProps {
     transactions: Transaction[];
     onBack: () => void;
     onEdit: (account: Account) => void;
-    onViewStats?: (account: Account) => void;
+    onViewStats: (account: Account) => void;
 }
 
 type DateRange = 'DAILY' | 'MONTHLY' | 'YEARLY';
@@ -19,7 +19,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: account.currency, maximumFractionDigits: 0 }).format(val);
 
-    // Reset cursor saat ganti akun
     useEffect(() => { setCursorDate(new Date()); }, [account.id]);
 
     const { start, end, label } = useMemo(() => {
@@ -84,12 +83,11 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
 
     return (
         <div className="bg-surface h-full flex flex-col pb-20 overflow-y-auto transition-colors duration-300">
-            {/* --- 1. HEADER (Info Saldo Pindah Sini) --- */}
+            {/* HEADER */}
             <div className="p-4 border-b border-white/10 sticky top-0 bg-surface z-10 flex justify-between items-center transition-colors duration-300">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-gray-300" /></button>
                     <div>
-                        {/* Format: Nama Akun - Saldo */}
                         <div className="flex items-center gap-2 flex-wrap">
                             <h2 className="font-bold text-lg text-white">{account.name}</h2>
                             <span className="text-gray-500 text-sm hidden sm:inline">-</span>
@@ -97,7 +95,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                                 {formatCurrency(account.balance)}
                             </span>
                         </div>
-                        {/* Group info ditaruh bawah kecil */}
                         <p className="text-xs text-gray-500">{account.group}</p>
                     </div>
                 </div>
@@ -107,7 +104,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                 </div>
             </div>
 
-            {/* Date Controls */}
+            {/* DATE CONTROLS */}
             <div className="p-4 space-y-4">
                  <div className="flex bg-white/5 p-1 rounded-lg">
                     {(['DAILY', 'MONTHLY', 'YEARLY'] as DateRange[]).map(r => (
@@ -122,7 +119,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400"><ChevronRight className="w-5 h-5" /></button>
                 </div>
 
-                {/* --- 2. SUMMARY BOX (CENTERED & 3 COLS) --- */}
+                {/* SUMMARY BOX */}
                 <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
                     <div className="flex flex-col items-center text-center">
                         <span className="text-[10px] text-gray-400">In</span>
@@ -134,18 +131,17 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     </div>
                     <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
                         <span className="text-[10px] text-gray-400">Change</span>
-                        <span className={`text-xs font-bold truncate w-full ${stats.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                        <span className={`text-xs font-bold truncate w-full ${stats.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net)}
                         </span>
                     </div>
-                    {/* End Balance DIHAPUS dari sini karena sudah pindah ke Header */}
                 </div>
             </div>
 
-            {/* Transaction List */}
+            {/* TRANSACTION LIST (COMPACT TEXT-XS) */}
             <div className="flex-1 divide-y divide-white/10">
                 {filteredTx.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">No transactions in this period</span></div>
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-500 gap-2"><CalendarIcon className="w-8 h-8 opacity-20" /><span className="text-xs">No transactions in this period</span></div>
                 ) : (
                     filteredTx.map(tx => {
                         const isAdjustment = tx.category === 'Adjustment';
@@ -173,19 +169,22 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                                         {getIcon(tx.type, tx.category)}
                                     </div>
                                     <div className="overflow-hidden min-w-0">
-                                        <p className="font-medium text-gray-200 truncate pr-2">
+                                        {/* TITLE: TEXT-XS FONT-BOLD */}
+                                        <p className="text-xs font-bold text-gray-200 truncate pr-2">
                                             {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
                                         </p>
-                                        <div className="text-xs text-gray-500">
+                                        <div className="text-[10px] text-gray-500 mt-0.5">
                                             {format(new Date(tx.date), 'dd MMM yyyy')}
                                         </div>
                                     </div>
                                 </div>
+                                
+                                {/* AMOUNT: TEXT-XS FONT-BOLD */}
                                 <div className="text-right">
-                                    <p className={`font-bold whitespace-nowrap ${amountColor}`}>
+                                    <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
                                         {sign}{formatCurrency(displayAmount)}
                                     </p>
-                                    {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
+                                    {tx.notes && !isAdjustment && <p className="text-[10px] text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
                                 </div>
                             </div>
                         );
