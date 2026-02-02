@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'; 
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Trash2, Wrench } from 'lucide-react'; 
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
@@ -26,9 +26,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
-  useEffect(() => {
-      setCursorDate(new Date());
-  }, [dateRange]);
+  useEffect(() => { setCursorDate(new Date()); }, [dateRange]);
 
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown Account';
   
@@ -50,7 +48,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
     return dict[key] || key;
   };
 
-  const getIcon = (type: string) => {
+  const getIcon = (type: string, category: string) => {
+    if (category === 'Adjustment') return <Wrench className="w-5 h-5 text-indigo-400" />;
     switch (type) {
       case 'INCOME': return <ArrowDownRight className="w-5 h-5 text-emerald-500" />;
       case 'EXPENSE': return <ArrowUpRight className="w-5 h-5 text-rose-500" />;
@@ -59,9 +58,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
     }
   };
 
-  const formatCurrency = (amount: number) => {
-     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
-  }
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
 
   const { start, end, label } = useMemo(() => {
     let s: Date, e: Date, l = '';
@@ -116,9 +113,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-white/10 overflow-hidden flex flex-col h-full transition-colors duration-300">
-      {/* FIX: Mengganti bg-[#18181b] (Hardcoded) menjadi bg-surface 
-         agar warna header mengikuti tema background user (Deep Forest, Midnight, dll).
-      */}
       <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
         <div className="flex justify-between items-center">
              <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -156,9 +150,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
-        {/* FIX: Mengganti bg-[#27272a] menjadi bg-white/5 
-           agar box ringkasan ini transparan dan cocok dengan tema apapun.
-        */}
         <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
             <div className="flex flex-col"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span><span className="text-sm font-bold text-emerald-400 truncate">{formatCurrency(summary.income)}</span></div>
             <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span><span className="text-sm font-bold text-rose-400 truncate">{formatCurrency(summary.expense)}</span></div>
@@ -166,58 +157,85 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         </div>
       </div>
       
+      {/* --- TRANSACTION LIST (UPDATED UI: CLEAN NO LABELS) --- */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface transition-colors duration-300">
         {filteredTransactions.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">{lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi'}</span></div>
         ) : (
-          filteredTransactions.slice(0, 100).map((tx) => (
-            <div 
-                key={tx.id} 
-                className="p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
-                onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
-            >
-              <div className="flex items-center gap-4 overflow-hidden">
-                <div className={`p-2 rounded-full bg-white/5 shrink-0`}>{getIcon(tx.type)}</div>
-                <div className="overflow-hidden min-w-0">
-                  <p className="font-medium text-gray-200 truncate pr-2">{tx.category || tx.type}</p>
-                  <div className="flex items-center text-xs text-gray-500 gap-2 flex-wrap">
-                    <span>{format(new Date(tx.date), 'dd MMM yyyy')}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span className="flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
-                        {getAccountName(tx.accountId)}
-                        {ownerFilter === 'All' && (() => {
-                            const acc = accounts.find(a => a.id === tx.accountId);
-                            if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
-                        })()}
-                        {tx.toAccountId && ` → ${getAccountName(tx.toAccountId)}`}
-                    </span>
-                  </div>
+          filteredTransactions.slice(0, 100).map((tx) => {
+            const isAdjustment = tx.category === 'Adjustment';
+            const isSurplus = isAdjustment && tx.type === 'INCOME';
+            const isDeficit = isAdjustment && tx.type === 'EXPENSE';
+
+            // Menentukan Warna Text Amount
+            let amountColor = 'text-gray-200';
+            let sign = '';
+            
+            if (isAdjustment) {
+                if (isDeficit) { amountColor = 'text-red-500'; sign = '-'; }
+                else { amountColor = 'text-emerald-500'; sign = '+'; }
+            } else {
+                if (tx.type === 'EXPENSE') { amountColor = 'text-rose-500'; sign = '-'; }
+                else if (tx.type === 'INCOME') { amountColor = 'text-emerald-500'; sign = '+'; }
+                else { amountColor = 'text-blue-400'; sign = ''; } // Transfer
+            }
+
+            return (
+                <div 
+                    key={tx.id} 
+                    className="p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
+                    onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
+                >
+                <div className="flex items-center gap-4 overflow-hidden">
+                    <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
+                        {getIcon(tx.type, tx.category)}
+                    </div>
+                    <div className="overflow-hidden min-w-0">
+                        {/* Judul: Jika Adjustment, tampilkan "Balance Adjustment", jika tidak tampilkan Category */}
+                        <p className="font-medium text-gray-200 truncate pr-2">
+                            {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
+                        </p>
+                        <div className="flex items-center text-xs text-gray-500 gap-2 flex-wrap">
+                            <span>{format(new Date(tx.date), 'dd MMM yyyy')}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
+                                {getAccountName(tx.accountId)}
+                                {ownerFilter === 'All' && (() => {
+                                    const acc = accounts.find(a => a.id === tx.accountId);
+                                    if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
+                                })()}
+                                {tx.toAccountId && ` → ${getAccountName(tx.toAccountId)}`}
+                            </span>
+                        </div>
+                    </div>
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-3 pl-2 shrink-0">
-                  <div className="text-right">
-                    <p className={`font-bold whitespace-nowrap ${tx.type === 'INCOME' ? 'text-emerald-500' : tx.type === 'EXPENSE' ? 'text-rose-500' : 'text-gray-200'}`}>
-                      {tx.type === 'EXPENSE' ? '-' : '+'}{formatCurrency(tx.amount)}
-                    </p>
-                    {tx.notes && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
-                  </div>
-                  
-                  {onDelete && (
-                      <button 
-                        onClick={(e) => {
-                            e.stopPropagation(); 
-                            onDelete(tx.id);
-                        }}
-                        className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                        title="Delete Transaction"
-                      >
-                          <Trash2 className="w-4 h-4" />
-                      </button>
-                  )}
-              </div>
-            </div>
-          ))
+                
+                <div className="flex items-center gap-3 pl-2 shrink-0">
+                    <div className="text-right">
+                        {/* AMOUNT: BERSIH TANPA LABEL, CUKUP WARNA */}
+                        <p className={`font-bold whitespace-nowrap ${amountColor}`}>
+                            {sign}{formatCurrency(tx.amount)}
+                        </p>
+                        
+                        {/* Notes ditampilkan kecil jika ada. Kalau adjustment, sembunyikan notes "Surplus/Deficit" yang panjang biar bersih */}
+                        {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
+                    </div>
+                    
+                    {onDelete && (
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation(); 
+                                onDelete(tx.id);
+                            }}
+                            className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            title="Delete Transaction"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+                </div>
+          )})
         )}
       </div>
     </div>

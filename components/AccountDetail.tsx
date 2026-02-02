@@ -1,263 +1,190 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction } from '../types';
-import { ArrowLeft, BarChart3, Edit2, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
-import { 
-    format, addDays, subDays, addMonths, subMonths, addYears, subYears,
-    isSameDay, isSameMonth, isSameYear, startOfYear, endOfYear, startOfMonth, endOfMonth,
-    parseISO
-} from 'date-fns';
+import { ArrowLeft, Edit, TrendingUp, TrendingDown, ArrowRightLeft, ArrowUpRight, ArrowDownRight, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Edit2, BarChart3 } from 'lucide-react';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, subDays, subWeeks, subMonths, subYears, addDays, addWeeks, addMonths, addYears } from 'date-fns';
 
 interface AccountDetailProps {
-  account: Account;
-  transactions: Transaction[];
-  onBack: () => void;
-  onEdit: (account: Account) => void;
-  onViewStats: (account: Account) => void;
+    account: Account;
+    transactions: Transaction[];
+    onBack: () => void;
+    onEdit: (account: Account) => void;
+    onViewStats: (account: Account) => void;
 }
 
-type ViewMode = 'DAILY' | 'MONTHLY' | 'ANNUALLY';
+type DateRange = 'DAILY' | 'MONTHLY' | 'YEARLY';
 
 const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, onBack, onEdit, onViewStats }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('MONTHLY');
-  const [cursorDate, setCursorDate] = useState(new Date());
+    const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
+    const [cursorDate, setCursorDate] = useState(new Date());
 
-  // Reset cursor when account changes
-  useEffect(() => {
-      setCursorDate(new Date());
-  }, [account.id]);
+    const formatCurrency = (val: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: account.currency, maximumFractionDigits: 0 }).format(val);
 
-  // --- 1. Calculate Running Balance & Process Transactions ---
-  const processedData = useMemo(() => {
-    // A. Filter transactions for this account ONLY
-    const accountTx = transactions.filter(t => 
-        t.accountId === account.id || t.toAccountId === account.id
-    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort Newest First
+    // Reset cursor saat ganti akun
+    useEffect(() => { setCursorDate(new Date()); }, [account.id]);
 
-    // B. Calculate Running Balance (Reverse Engineering)
-    let currentBalance = account.balance;
-    
-    return accountTx.map(tx => {
-        const txDate = new Date(tx.date);
-        const isTransferOut = tx.type === 'TRANSFER' && tx.accountId === account.id;
-        const isTransferIn = tx.type === 'TRANSFER' && tx.toAccountId === account.id;
-        
-        let amountEffect = 0;
-        if (tx.type === 'INCOME') amountEffect = tx.amount;
-        else if (tx.type === 'EXPENSE') amountEffect = -tx.amount;
-        else if (isTransferOut) amountEffect = -(tx.amount + (tx.fees || 0));
-        else if (isTransferIn) amountEffect = tx.amount;
+    const { start, end, label } = useMemo(() => {
+        let s: Date, e: Date, l = '';
+        switch (dateRange) {
+            case 'DAILY': s = startOfDay(cursorDate); e = endOfDay(cursorDate); l = format(cursorDate, 'dd MMMM yyyy'); break;
+            case 'MONTHLY': s = startOfMonth(cursorDate); e = endOfMonth(cursorDate); l = format(cursorDate, 'MMMM yyyy'); break;
+            case 'YEARLY': s = startOfYear(cursorDate); e = endOfYear(cursorDate); l = format(cursorDate, 'yyyy'); break;
+        }
+        return { start: s, end: e, label: l };
+    }, [dateRange, cursorDate]);
 
-        const balanceAfter = currentBalance;
-        currentBalance = currentBalance - amountEffect;
+    const handlePrev = () => {
+        if (dateRange === 'DAILY') setCursorDate(d => subDays(d, 1));
+        if (dateRange === 'MONTHLY') setCursorDate(d => subMonths(d, 1));
+        if (dateRange === 'YEARLY') setCursorDate(d => subYears(d, 1));
+    };
+  
+    const handleNext = () => {
+        if (dateRange === 'DAILY') setCursorDate(d => addDays(d, 1));
+        if (dateRange === 'MONTHLY') setCursorDate(d => addMonths(d, 1));
+        if (dateRange === 'YEARLY') setCursorDate(d => addYears(d, 1));
+    };
 
-        return { ...tx, balanceAfter, amountEffect, dateObj: txDate };
-    });
-  }, [account, transactions]);
+    const filteredTx = useMemo(() => {
+        return transactions.filter(tx => {
+            // Filter: Apakah transaksi ini melibatkan akun ini?
+            const isRelevant = tx.accountId === account.id || tx.toAccountId === account.id;
+            if (!isRelevant) return false;
 
-  // --- 2. Filter Data based on View Mode & Cursor ---
-  const filteredData = useMemo(() => {
-    return processedData.filter(tx => {
-        if (viewMode === 'DAILY') return isSameDay(tx.dateObj, cursorDate);
-        if (viewMode === 'MONTHLY') return isSameMonth(tx.dateObj, cursorDate);
-        if (viewMode === 'ANNUALLY') return isSameYear(tx.dateObj, cursorDate);
-        return false;
-    });
-  }, [processedData, viewMode, cursorDate]);
+            const txDate = parseISO(tx.date);
+            return isWithinInterval(txDate, { start, end });
+        }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, account.id, start, end]);
 
-  // --- 3. Calculate Summaries ---
-  const summary = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    
-    filteredData.forEach(tx => {
-        if (tx.amountEffect > 0) income += tx.amountEffect;
-        else expense += Math.abs(tx.amountEffect);
-    });
+    const stats = useMemo(() => {
+        let income = 0; let expense = 0;
+        filteredTx.forEach(tx => {
+            // Hitung efek saldo ke akun ini
+            let amount = 0;
+            if (tx.accountId === account.id) {
+                // Uang Keluar (Expense / Transfer Out)
+                if (tx.type === 'INCOME') income += tx.amount;
+                else {
+                    amount = tx.amount;
+                    if(tx.type === 'TRANSFER' && tx.toAccountId) expense += amount;
+                    else if(tx.type === 'EXPENSE') expense += amount;
+                }
+            } else if (tx.toAccountId === account.id) {
+                // Uang Masuk (Transfer In)
+                income += tx.amount;
+            }
+        });
+        return { income, expense, net: income - expense };
+    }, [filteredTx, account.id]);
 
-    return { income, expense, total: income - expense };
-  }, [filteredData]);
+    const getIcon = (type: string, category: string) => {
+        if (category === 'Adjustment') return <Wrench className="w-5 h-5 text-indigo-400" />;
+        switch (type) {
+          case 'INCOME': return <ArrowDownRight className="w-5 h-5 text-emerald-500" />;
+          case 'EXPENSE': return <ArrowUpRight className="w-5 h-5 text-rose-500" />;
+          case 'TRANSFER': return <ArrowRightLeft className="w-5 h-5 text-blue-500" />;
+          default: return <RefreshCw className="w-5 h-5 text-gray-500" />;
+        }
+    };
 
-  // --- 4. Grouping Logic ---
-  const groupedTransactions = useMemo(() => {
-      const groups: Record<string, typeof filteredData> = {};
-      filteredData.forEach(tx => {
-          // If Annually, group by Month. If Monthly/Daily, group by Day.
-          const dateKey = viewMode === 'ANNUALLY' 
-            ? format(tx.dateObj, 'yyyy-MM') 
-            : format(tx.dateObj, 'yyyy-MM-dd');
-          
-          if (!groups[dateKey]) groups[dateKey] = [];
-          groups[dateKey].push(tx);
-      });
-      return groups;
-  }, [filteredData, viewMode]);
-
-  // --- 5. Navigation Handlers ---
-  const handlePrev = () => {
-      if (viewMode === 'DAILY') setCursorDate(d => subDays(d, 1));
-      if (viewMode === 'MONTHLY') setCursorDate(d => subMonths(d, 1));
-      if (viewMode === 'ANNUALLY') setCursorDate(d => subYears(d, 1));
-  };
-
-  const handleNext = () => {
-      if (viewMode === 'DAILY') setCursorDate(d => addDays(d, 1));
-      if (viewMode === 'MONTHLY') setCursorDate(d => addMonths(d, 1));
-      if (viewMode === 'ANNUALLY') setCursorDate(d => addYears(d, 1));
-  };
-
-  const getDisplayLabel = () => {
-      if (viewMode === 'DAILY') return format(cursorDate, 'dd MMM yyyy');
-      if (viewMode === 'MONTHLY') return format(cursorDate, 'MMMM yyyy');
-      if (viewMode === 'ANNUALLY') return format(cursorDate, 'yyyy');
-      return '';
-  };
-
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('id-ID', { style: 'currency', currency: account.currency || 'IDR', maximumFractionDigits: 0 }).format(val);
-
-  return (
-    <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
-      {/* --- HEADER --- */}
-      <div className="bg-surface border-b border-white/10 sticky top-0 z-20 shadow-lg">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-gray-300">
-                    <ArrowLeft className="w-6 h-6" />
-                </button>
-                <div className="flex items-center gap-2">
-                    <h1 className="text-lg font-bold text-white leading-tight">{account.name}</h1>
-                    <span className="text-gray-500">-</span>
-                    <span className="text-sm text-gray-400 font-medium">{account.group}</span>
+    return (
+        <div className="bg-surface h-full flex flex-col pb-20 overflow-y-auto transition-colors duration-300">
+            {/* Header */}
+            <div className="p-4 border-b border-white/10 sticky top-0 bg-surface z-10 flex justify-between items-center transition-colors duration-300">
+                <div className="flex items-center gap-3">
+                    <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-gray-300" /></button>
+                    <div>
+                        <h2 className="font-bold text-lg text-white">{account.name}</h2>
+                        <span className="text-xs text-gray-400">{account.group}</span>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                     <button onClick={() => onViewStats && onViewStats(account)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400"><BarChart3 className="w-5 h-5"/></button>
+                     <button onClick={() => onEdit(account)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400"><Edit2 className="w-5 h-5"/></button>
                 </div>
             </div>
-            <div className="flex gap-2">
-                <button onClick={() => onViewStats(account)} className="p-2 rounded-full hover:bg-white/10 text-gray-300" title="Statistics">
-                    <BarChart3 className="w-5 h-5" />
-                </button>
-                <button onClick={() => onEdit(account)} className="p-2 rounded-full hover:bg-white/10 text-gray-300" title="Edit Account">
-                    <Edit2 className="w-5 h-5" />
-                </button>
+
+            {/* Date Controls */}
+            <div className="p-4 space-y-4">
+                 <div className="flex bg-white/5 p-1 rounded-lg">
+                    {(['DAILY', 'MONTHLY', 'YEARLY'] as DateRange[]).map(r => (
+                        <button key={r} onClick={() => setDateRange(r)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${dateRange === r ? 'bg-white/10 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>
+                            {r.charAt(0) + r.slice(1).toLowerCase()}
+                        </button>
+                    ))}
+                 </div>
+                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-2 py-1.5">
+                    <button onClick={handlePrev} className="p-2 hover:bg-white/10 rounded-full text-gray-400"><ChevronLeft className="w-5 h-5" /></button>
+                    <span className="font-bold text-white text-sm">{label}</span>
+                    <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400"><ChevronRight className="w-5 h-5" /></button>
+                </div>
+
+                {/* Summary Box */}
+                <div className="grid grid-cols-4 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">In</span><span className="text-xs font-bold text-emerald-400 truncate">{formatCurrency(stats.income)}</span></div>
+                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Out</span><span className="text-xs font-bold text-rose-400 truncate">{formatCurrency(stats.expense)}</span></div>
+                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Change</span><span className={`text-xs font-bold truncate ${stats.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net)}</span></div>
+                    <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400">End Balance</span><span className="text-xs font-bold text-white truncate">{formatCurrency(account.balance)}</span></div>
+                </div>
             </div>
-          </div>
 
-          {/* --- TABS --- */}
-          <div className="grid grid-cols-3 px-4 mb-3 gap-1">
-              {(['DAILY', 'MONTHLY', 'ANNUALLY'] as ViewMode[]).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`text-xs font-bold py-2 rounded-lg transition-colors ${
-                        viewMode === mode 
-                        ? 'bg-white/10 text-primary' 
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                      {mode === 'ANNUALLY' ? 'Yearly' : mode.charAt(0) + mode.slice(1).toLowerCase()}
-                  </button>
-              ))}
-          </div>
+            {/* Transaction List (UI DIPERBAIKI: Ikon Obeng & Warna Merah/Hijau Konsisten) */}
+            <div className="flex-1 divide-y divide-white/10">
+                {filteredTx.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">No transactions in this period</span></div>
+                ) : (
+                    filteredTx.map(tx => {
+                        const isAdjustment = tx.category === 'Adjustment';
+                        
+                        let amountColor = 'text-gray-200';
+                        let sign = '';
+                        let displayAmount = tx.amount;
 
-          {/* --- NAVIGATOR SLIDER --- */}
-          <div className="flex items-center justify-between px-4 pb-4">
-             <button onClick={handlePrev} className="p-1 hover:bg-white/10 rounded-full text-gray-400 transition-colors"><ChevronLeft className="w-6 h-6"/></button>
-             <span className="text-white font-bold text-lg select-none">{getDisplayLabel()}</span>
-             <button onClick={handleNext} className="p-1 hover:bg-white/10 rounded-full text-gray-400 transition-colors"><ChevronRight className="w-6 h-6"/></button>
-          </div>
+                        // 1. Logic Warna untuk SEMUA TIPE (Hijau = Masuk, Merah = Keluar)
+                        if (tx.type === 'TRANSFER') {
+                            if (tx.accountId === account.id) {
+                                // Transfer Keluar dari akun ini -> Merah
+                                amountColor = 'text-rose-500'; sign = '-';
+                            } else {
+                                // Transfer Masuk ke akun ini -> Hijau
+                                amountColor = 'text-emerald-500'; sign = '+';
+                            }
+                        } 
+                        // 2. Logic Adjustment & Expense/Income Biasa
+                        else {
+                            // Cek apakah Income atau Expense
+                            const isIncome = tx.type === 'INCOME';
+                            amountColor = isIncome ? 'text-emerald-500' : 'text-rose-500';
+                            sign = isIncome ? '+' : '-';
+                        }
 
-          {/* --- SUMMARY ROW --- */}
-          <div className="grid grid-cols-4 gap-2 p-3 bg-[#27272a] text-xs border-b border-white/10">
-              <div className="text-center">
-                  <div className="text-gray-400 mb-1">In</div>
-                  <div className="text-blue-400 font-bold truncate">{formatCurrency(summary.income)}</div>
-              </div>
-              <div className="text-center">
-                  <div className="text-gray-400 mb-1">Out</div>
-                  <div className="text-red-400 font-bold truncate">{formatCurrency(summary.expense)}</div>
-              </div>
-              <div className="text-center">
-                  <div className="text-gray-400 mb-1">Change</div>
-                  <div className={`${summary.total >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold truncate`}>
-                      {summary.total > 0 ? '+' : ''}{formatCurrency(summary.total)}
-                  </div>
-              </div>
-              <div className="text-center">
-                  <div className="text-gray-400 mb-1">End Balance</div>
-                  {/* Show latest balance of period, or fallback */}
-                  <div className="text-gray-200 font-bold truncate">
-                      {filteredData.length > 0 
-                        ? formatCurrency(filteredData[0].balanceAfter) 
-                        : '-' 
-                      }
-                  </div>
-              </div>
-          </div>
-      </div>
-
-      {/* --- TRANSACTION LIST --- */}
-      <div className="flex-1">
-        {Object.keys(groupedTransactions).length === 0 ? (
-            <div className="p-10 flex flex-col items-center justify-center text-gray-500 opacity-50">
-                <CalendarIcon className="w-12 h-12 mb-2" />
-                <p>No transactions found</p>
-                <p className="text-xs mt-1">{getDisplayLabel()}</p>
-            </div>
-        ) : (
-            Object.keys(groupedTransactions).sort((a,b) => new Date(b).getTime() - new Date(a).getTime()).map(dateKey => {
-                const dayTx = groupedTransactions[dateKey];
-                // Group totals
-                const dayIncome = dayTx.reduce((sum, t) => t.amountEffect > 0 ? sum + t.amountEffect : sum, 0);
-                const dayExpense = dayTx.reduce((sum, t) => t.amountEffect < 0 ? sum + Math.abs(t.amountEffect) : sum, 0);
-                
-                // Date formatting for group header
-                const dateObj = viewMode === 'ANNUALLY' ? parseISO(dateKey + '-01') : parseISO(dateKey);
-                const dayLabel = viewMode === 'ANNUALLY' ? format(dateObj, 'MMMM yyyy') : format(dateObj, 'dd');
-                const subLabel = viewMode === 'ANNUALLY' ? '' : format(dateObj, 'EEE, MMM yyyy');
-
-                return (
-                    <div key={dateKey}>
-                        {/* GROUP HEADER */}
-                        <div className="bg-[#18181b] px-4 py-2 flex justify-between items-center border-b border-white/5">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl font-bold text-white">{dayLabel}</span>
-                                {subLabel && (
-                                    <div className="flex flex-col leading-none">
-                                        <span className="text-[10px] text-gray-500 font-medium uppercase">{subLabel}</span>
+                        return (
+                            <div key={tx.id} className="p-4 hover:bg-white/5 transition-colors flex items-center justify-between group">
+                                <div className="flex items-center gap-4 overflow-hidden">
+                                    <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
+                                        {getIcon(tx.type, tx.category)}
                                     </div>
-                                )}
-                            </div>
-                            <div className="flex gap-4 text-xs">
-                                {dayIncome > 0 && <span className="text-blue-400">{formatCurrency(dayIncome)}</span>}
-                                {dayExpense > 0 && <span className="text-red-400">{formatCurrency(dayExpense)}</span>}
-                            </div>
-                        </div>
-
-                        {/* ROWS */}
-                        {dayTx.map(tx => (
-                            <div key={tx.id} className="px-4 py-3 bg-surface border-b border-white/5 flex justify-between items-center hover:bg-white/5 transition-colors">
-                                <div className="flex flex-col gap-1 overflow-hidden">
-                                    <span className="text-sm font-medium text-gray-200 truncate pr-2">{tx.category || tx.type}</span>
-                                    {tx.notes && <span className="text-xs text-gray-500 truncate">{tx.notes}</span>}
-                                    <span className="text-[10px] text-gray-600">
-                                        {tx.type === 'TRANSFER' ? (tx.amountEffect > 0 ? 'Transfer In' : 'Transfer Out') : tx.type}
-                                    </span>
-                                </div>
-                                <div className="text-right shrink-0">
-                                    <div className={`font-bold text-sm ${tx.amountEffect > 0 ? 'text-blue-400' : 'text-gray-200'}`}>
-                                        {formatCurrency(tx.amountEffect)}
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 mt-0.5">
-                                        {formatCurrency(tx.balanceAfter)}
+                                    <div className="overflow-hidden min-w-0">
+                                        <p className="font-medium text-gray-200 truncate pr-2">
+                                            {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
+                                        </p>
+                                        <div className="text-xs text-gray-500">
+                                            {format(new Date(tx.date), 'dd MMM yyyy')}
+                                        </div>
                                     </div>
                                 </div>
+                                <div className="text-right">
+                                    <p className={`font-bold whitespace-nowrap ${amountColor}`}>
+                                        {sign}{formatCurrency(displayAmount)}
+                                    </p>
+                                    {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
+                                </div>
                             </div>
-                        ))}
-                    </div>
-                );
-            })
-        )}
-      </div>
-    </div>
-  );
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default AccountDetail;
