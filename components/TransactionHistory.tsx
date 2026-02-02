@@ -137,7 +137,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
       <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
         
         {/* HEADER & SEARCH */}
-        <div className="flex justify-between items-center h-8">
+        {/* PERBAIKAN: Layout diubah agar search icon nempel di sebelah judul */}
+        <div className="flex items-center h-8 gap-2">
              {showSearch ? (
                  <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-10 duration-200">
                      <div className="relative flex-1">
