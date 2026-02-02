@@ -4,10 +4,11 @@ import { UserCircle2, Landmark, Plus, X, ArrowDownRight, Pencil, CheckCircle2, B
 import { format, isSameMonth, parseISO } from 'date-fns';
 
 // === INTERNAL COMPONENT: CURRENCY INPUT ===
+// PERBAIKAN: Mengubah tipe 'currency' menjadi string agar tidak error
 interface CurrencyInputProps {
     value: string | number;
     onChange: (val: string) => void;
-    currency: string;
+    currency: string; 
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
@@ -112,7 +113,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'create_title': lang === 'en' ? 'Create Hajj/Umrah Fund' : 'Buat Tabungan Haji/Umrah',
       'fund_type': lang === 'en' ? 'Fund Type' : 'Jenis Tabungan',
       'target': lang === 'en' ? 'Target Amount' : 'Target Dana',
-      'initial_balance': lang === 'en' ? 'Initial Balance' : 'Saldo Awal', // Baru
+      'initial_balance': lang === 'en' ? 'Initial Balance' : 'Saldo Awal',
       'save': lang === 'en' ? 'Save' : 'Simpan',
       'cancel': lang === 'en' ? 'Cancel' : 'Batal',
       'husband': lang === 'en' ? 'Husband' : 'Suami',
@@ -330,7 +331,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
             )}
         </div>
 
-        {/* --- RIWAYAT TRANSAKSI (LAYOUT VERTIKAL LENGKAP) --- */}
+        {/* --- RIWAYAT TRANSAKSI --- */}
         <div className="space-y-3 pb-8">
             <div className="flex justify-between items-end px-1">
                 <h3 className="text-gray-400 font-bold text-sm uppercase tracking-wider">{t('history')}</h3>
