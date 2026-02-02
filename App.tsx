@@ -12,6 +12,81 @@ import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOw
 import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { subDays, format } from 'date-fns';
 
+
+
+// ==========================================
+// 1. KOMPONEN LOCK SCREEN (GLOBAL OVERLAY)
+// ==========================================
+const LockScreen = ({ onUnlock, correctPin, onForgot }: { onUnlock: () => void, correctPin: string, onForgot: () => void }) => {
+    const [input, setInput] = useState('');
+    const [error, setError] = useState(false);
+    const [shake, setShake] = useState(false);
+
+    const handlePress = (num: string) => {
+        if (input.length < 6) {
+            const next = input + num;
+            setInput(next);
+            
+            // Auto submit jika sudah 6 digit
+            if (next.length === 6) {
+                if (next === correctPin) {
+                    onUnlock();
+                } else {
+                    setError(true);
+                    setShake(true);
+                    setTimeout(() => {
+                        setInput('');
+                        setShake(false);
+                        setError(false);
+                    }, 500);
+                }
+            }
+        }
+    };
+
+    const handleDelete = () => {
+        setInput(prev => prev.slice(0, -1));
+        setError(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-[#18181b] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="mb-8 flex flex-col items-center">
+                <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4 text-emerald-500">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                </div>
+                <h2 className="text-xl font-bold text-white mb-2">FinancePro Locked</h2>
+                <p className="text-sm text-gray-400">Enter your 6-digit PIN to access</p>
+            </div>
+
+            {/* Indikator Titik PIN */}
+            <div className={`flex gap-4 mb-12 ${shake ? 'animate-shake' : ''}`}>
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className={`w-4 h-4 rounded-full transition-all duration-200 ${i < input.length ? (error ? 'bg-red-500 scale-110' : 'bg-emerald-500 scale-110') : 'bg-white/10'}`} />
+                ))}
+            </div>
+
+            {/* Keypad Angka */}
+            <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                    <button key={num} onClick={() => handlePress(num.toString())} className="w-20 h-20 rounded-full bg-white/5 hover:bg-white/10 text-2xl font-bold text-white transition-all active:scale-95 flex items-center justify-center">
+                        {num}
+                    </button>
+                ))}
+                <div className="w-20 h-20"></div> {/* Spacer */}
+                <button onClick={() => handlePress('0')} className="w-20 h-20 rounded-full bg-white/5 hover:bg-white/10 text-2xl font-bold text-white transition-all active:scale-95 flex items-center justify-center">0</button>
+                <button onClick={handleDelete} className="w-20 h-20 rounded-full text-white/50 hover:text-white transition-all active:scale-95 flex items-center justify-center"><Trash2 className="w-6 h-6" /></button>
+            </div>
+
+            <button onClick={onForgot} className="mt-12 text-sm text-gray-500 hover:text-emerald-500 transition-colors">
+                Lupa PIN? (Logout & Reset)
+            </button>
+            <style>{`@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } } .animate-shake { animation: shake 0.3s ease-in-out; }`}</style>
+        </div>
+    );
+};
+
+
 // OFFLINE MODE: No external services imported.
 
 const ACCENT_PRESETS = [
@@ -83,7 +158,14 @@ const CurrencyInput = ({ value, onChange, currency, className, ...props }: Curre
 const App = () => {
 
 
-    // ... state lainnya ...
+// ... state lainnya ...
+
+
+  // --- NEW: APP LOCK STATE ---
+  const [appPin, setAppPin] = useState<string>(''); // PIN yang aktif (dari Cloud)
+  const [isLocked, setIsLocked] = useState(false);  // Status layar terkunci
+  const [showPinSetup, setShowPinSetup] = useState(false); // Modal bikin PIN
+  const [newPinInput, setNewPinInput] = useState(''); // Input sementara bikin PIN
   
   // --- ADD ACCOUNT MODAL STATE (NEW) ---
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
@@ -165,6 +247,12 @@ const App = () => {
     
     if (data) {
         if (data.language) setLang(data.language as 'en' | 'id');
+        // --- 1. LOAD PIN DARI CLOUD ---
+        if (data.app_pin) {
+            setAppPin(data.app_pin);
+            setIsLocked(true); // Langsung kunci jika ada PIN
+        }
+        // ------------------------------
         if (data.accent_color) {
             // Cek apakah preset atau custom
             const isPreset = ACCENT_PRESETS.some(p => p.value === data.accent_color);
@@ -316,6 +404,7 @@ useEffect(() => {
               language: lang,
               accent_color: colorToSave,
               bg_theme: JSON.stringify(themeData),
+              app_pin: appPin, // <--- 2. SIMPAN PIN KE CLOUD
               updated_at: new Date().toISOString()
           });
           
@@ -324,7 +413,7 @@ useEffect(() => {
     }, 2000); // Tunggu 2 detik setelah user selesai klik-klik
 
     return () => clearTimeout(timer); // Reset timer jika user masih mengganti setting
-}, [currentAccent, customAccentHex, currentTheme, customBgHex, lang, user, isDataLoaded]);
+}, [currentAccent, customAccentHex, currentTheme, customBgHex, lang, user, isDataLoaded, appPin]);
 
   // ================= SELESAI KODE PERBAIKAN =================
 
@@ -535,14 +624,46 @@ if (data.user) {
 };
 
 // 2. Ganti handleLogout menjadi versi ini
+// GANTI handleLogout YANG LAMA DENGAN INI (HANYA BOLEH ADA 1)
 const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
         console.error("Error logging out:", error.message);
     }
-    // Hapus data user dari state aplikasi agar kembali ke tampilan login
+    
+    // Reset semua state User & Keamanan
     setUser(null);
+    setAppPin('');      // Bersihkan PIN dari memori lokal
+    setIsLocked(false); // Buka kunci (karena kembali ke login screen)
 };
+
+// --- PIN HANDLERS ---
+  const handleCreatePin = () => {
+      if (newPinInput.length === 6) {
+          setAppPin(newPinInput); // State berubah -> useEffect jalan -> Simpan ke Cloud
+          setShowPinSetup(false);
+          setNewPinInput('');
+          alert("Keamanan Aktif! Aplikasi akan terkunci otomatis di semua perangkat Anda.");
+      } else {
+          alert("PIN harus 6 digit angka.");
+      }
+  };
+
+  const handleDisablePin = () => {
+      if (confirm("Matikan fitur PIN Lock? (Berlaku untuk semua perangkat)")) {
+          setAppPin(''); // Kosongkan PIN -> useEffect jalan -> Hapus dari Cloud
+          setIsLocked(false);
+      }
+  };
+
+  const handleForgotPin = () => {
+      if (confirm("Lupa PIN? Anda harus Logout untuk reset sesi demi keamanan.")) {
+          handleLogout(); 
+      }
+  };
+  
+
+
 
   // --- IMPORT FILE HANDLER (DENGAN SYNC SUPABASE) ---
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1294,6 +1415,35 @@ const handleSubmitNewAccount = async () => {
                                   </div>
                               </div>
 
+                              {/* --- SECURITY SETTING --- */}
+<div className="mt-4 bg-surface-light p-3 rounded-lg flex items-center justify-between border border-white/5">
+    <div>
+        <p className="text-sm font-medium text-gray-300 flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${appPin ? 'bg-emerald-500' : 'bg-gray-500'}`}></div>
+            App Lock (PIN)
+        </p>
+        <p className="text-[10px] text-gray-500 mt-0.5">
+            {appPin ? 'Aktif (Cloud Synced)' : 'Nonaktif'}
+        </p>
+    </div>
+    
+    {appPin ? (
+        <button 
+            onClick={handleDisablePin}
+            className="text-xs font-bold text-red-400 border border-red-400/30 px-3 py-1.5 rounded-lg hover:bg-red-400/10 transition-colors"
+        >
+            Matikan
+        </button>
+    ) : (
+        <button 
+            onClick={() => setShowPinSetup(true)}
+            className="text-xs font-bold text-emerald-400 border border-emerald-400/30 px-3 py-1.5 rounded-lg hover:bg-emerald-400/10 transition-colors"
+        >
+            Aktifkan
+        </button>
+    )}
+</div>
+
                               {/* --- ACCENT COLOR --- */}
                               <div className="p-3 bg-surface-light rounded-lg">
                                   <div className="flex justify-between items-center mb-3">
@@ -1404,6 +1554,7 @@ const handleSubmitNewAccount = async () => {
 
   return (
     <Layout 
+      // ... props layout tetap sama ...
       activeTab={activeTab} 
       setActiveTab={handleTabChange} 
       onAddPress={onAddPress}
@@ -1413,425 +1564,58 @@ const handleSubmitNewAccount = async () => {
       lang={lang}
       setLang={setLang}
     >
+        {/* === 1. LAYAR PENGUNCI (PRIORITAS TERTINGGI) === */}
+        {isLocked && appPin && (
+            <LockScreen 
+                correctPin={appPin} 
+                onUnlock={() => setIsLocked(false)} 
+                onForgot={handleForgotPin}
+            />
+        )}
+
         {renderContent()}
 
-        {/* --- GLOBAL LOADING OVERLAY --- */}
-        {isLoading && (
-            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center flex-col animate-in fade-in duration-200">
-                <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-                <p className="text-white font-bold text-lg animate-pulse">Processing Data...</p>
-                <p className="text-gray-400 text-sm mt-2">Please wait while we import your transactions.</p>
-            </div>
-        )}
+        {/* ... Loading Overlay & Modal Transaksi (Biarkan kode lama) ... */}
 
-       {/* --- ADD TRANSACTION MODAL (FLOATING CENTER STYLE) --- */}
-        {showTransactionModal && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-                {/* STYLE UPDATED:
-                   1. items-center: Posisi vertikal di tengah (bukan items-end/bawah)
-                   2. max-w-md: Lebar dibatasi agar rapi
-                   3. rounded-2xl: Sudut membulat penuh di semua sisi
-                   4. zoom-in-95: Efek muncul pop-up
-                   5. max-h-[90vh]: Agar tidak melebihi tinggi layar, konten bisa discroll
-                */}
-                <div className="w-full max-w-md bg-surface rounded-2xl border border-white/10 overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-                    
-                    {/* Header Modal */}
-                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b] shrink-0">
-                        <h3 className="font-bold text-white text-lg">
-                            {showCategoryManager ? 'Manage Categories' : 'New Transaction'}
-                        </h3>
-                        <button onClick={() => { setShowTransactionModal(false); setShowCategoryManager(false); }}><X className="w-6 h-6 text-gray-400" /></button>
-                    </div>
-                    
-                    {/* === MODE 1: CATEGORY MANAGER === */}
-                    {showCategoryManager ? (
-                        <div className="overflow-y-auto p-6 space-y-4 flex-1">
-                             <div className="flex items-center justify-between mb-2">
-                                 <p className="text-xs text-gray-400">Add or edit your transaction categories.</p>
-                                 <button onClick={() => setShowCategoryManager(false)} className="text-xs font-bold text-blue-400 border border-blue-400/30 px-3 py-1 rounded-full">Done</button>
-                             </div>
-                             
-                             {/* Input Add Category */}
-                             <div className="flex gap-2">
-                                 <input 
-                                     type="text" 
-                                     value={newCategoryName} 
-                                     onChange={e => setNewCategoryName(e.target.value)}
-                                     placeholder="New Category Name..."
-                                     className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
-                                     onKeyDown={(e) => { if(e.key === 'Enter') handleAddCategory(); }}
-                                 />
-                                 <button onClick={handleAddCategory} className="bg-emerald-600 hover:bg-emerald-700 px-4 rounded-xl text-white shadow-lg"><Plus className="w-5 h-5"/></button>
-                             </div>
-
-                             {/* List Categories */}
-                             <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                                 {categories.map((cat, idx) => (
-                                     <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 group hover:border-white/20 transition-colors">
-                                         {editingCategory?.idx === idx ? (
-                                             // Mode Edit
-                                             <div className="flex items-center gap-2 flex-1">
-                                                 <input 
-                                                     value={editingCategory.name} 
-                                                     onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
-                                                     className="bg-black/40 text-white rounded-lg p-2 flex-1 outline-none border border-blue-500 text-sm"
-                                                     autoFocus
-                                                 />
-                                                 <button onClick={handleUpdateCategory} className="p-2 bg-blue-600 rounded-lg text-white"><Save className="w-4 h-4"/></button>
-                                             </div>
-                                         ) : (
-                                             // Mode View
-                                             <span className="text-sm text-gray-200 font-medium pl-1">{cat}</span>
-                                         )}
-                                         
-                                         {/* Action Buttons */}
-                                         {editingCategory?.idx !== idx && (
-                                            <div className="flex gap-1">
-                                                <button onClick={() => setEditingCategory({idx, name: cat})} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg"><Edit3 className="w-4 h-4"/></button>
-                                                <button onClick={() => handleDeleteCategory(cat)} className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                                            </div>
-                                         )}
-                                     </div>
-                                 ))}
-                             </div>
-                        </div>
-                    ) : (
-                        /* === MODE 2: FORM TRANSAKSI === */
-                        <div className="overflow-y-auto p-6 space-y-5">
-                            {/* Type Toggle */}
-                            <div className="flex bg-white/5 p-1 rounded-xl">
-                                <button type="button" onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-                                    <ArrowUpRight className="w-4 h-4"/> Expense
-                                </button>
-                                <button type="button" onClick={() => setNewTxType('INCOME')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'INCOME' ? 'bg-emerald-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-                                    <ArrowDownRight className="w-4 h-4"/> Income
-                                </button>
-                                <button type="button" onClick={() => setNewTxType('TRANSFER')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'TRANSFER' ? 'bg-blue-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-                                    <ArrowRightLeft className="w-4 h-4"/> Transfer
-                                </button>
-                            </div>
-
-                            {/* Amount (DIPERBAIKI: Pake CurrencyInput) */}
-                            <div>
-                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
-                                <CurrencyInput 
-                                    value={newTxAmount}
-                                    onChange={val => setNewTxAmount(val)}
-                                    currency={currency}
-                                    className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600"
-                                    placeholder="0"
-                                    autoFocus
-                                />
-                            </div>
-
-                            {/* Accounts Selection */}
-                            <div className="grid grid-cols-1 gap-4">
-                                <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-xs text-gray-400 uppercase font-bold block">{newTxType === 'TRANSFER' ? 'From Account' : 'Account'}</label>
-                                        <div className="flex bg-white/5 p-0.5 rounded-lg">
-                                            {(['All', 'Husband', 'Wife'] as const).map(role => (
-                                                <button key={role} type="button" onClick={() => setNewTxOwnerFilter(role)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${newTxOwnerFilter === role ? 'bg-gray-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{role === 'All' ? 'All' : role === 'Husband' ? 'Suami' : 'Istri'}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <select value={newTxAccountId} onChange={e => setNewTxAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                                        <option value="" disabled>Select Account</option>
-                                        {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).map(acc => (
-                                            <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                {newTxType === 'TRANSFER' && (
-                                    <div>
-                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">To Account</label>
-                                        <select value={newTxToAccountId} onChange={e => setNewTxToAccountId(e.target.value)} className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                                            <option value="" disabled>Select Destination</option>
-                                            {accounts.filter(a => newTxOwnerFilter === 'All' || a.owner === newTxOwnerFilter || !a.owner).filter(a => a.id !== newTxAccountId).map(acc => (
-                                                <option key={acc.id} value={acc.id}>{acc.name} ({acc.group})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Category with WORKING Gear Icon */}
-                            {newTxType !== 'TRANSFER' && (
-                                <div>
-                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
-                                    <div className="flex gap-2">
-                                        <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                                            {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
-                                        </select>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowCategoryManager(true)} 
-                                            className="p-3 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors border border-white/5"
-                                        >
-                                            <Settings className="w-5 h-5"/>
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Note (Date removed as requested previously) */}
-                            <div>
-                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
-                                <input 
-                                    type="text"
-                                    value={newTxNotes}
-                                    onChange={e => setNewTxNotes(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                    placeholder="Description (Optional)..."
-                                />
-                                <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date set to now automatically.</p>
-                            </div>
-
-                            <button 
-                                onClick={handleSubmitTransaction}
-                                className={`w-full font-bold py-3.5 rounded-xl mt-4 transition-all text-white shadow-lg ${
-                                    newTxType === 'EXPENSE' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-900/20' :
-                                    newTxType === 'INCOME' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20' :
-                                    'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'
-                                }`}
-                            >
-                                Save Transaction
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-        )}
-
-
-        {/* --- EDIT ACCOUNT MODAL --- */}
-        {showEditAccountModal && editingAccount && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+        {/* === 2. MODAL SETUP PIN (UNTUK MEMBUAT PIN BARU) === */}
+        {showPinSetup && (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
                 <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-white">Edit Account</h3>
-                        <button onClick={() => setShowEditAccountModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-white">Buat PIN Aplikasi</h3>
+                        <button onClick={() => setShowPinSetup(false)}><X className="w-5 h-5 text-gray-400"/></button>
                     </div>
                     
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label>
-                            <input 
-                                type="text"
-                                value={editingAccount.name}
-                                onChange={e => setEditingAccount({...editingAccount, name: e.target.value})}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label>
-                            <div className="flex bg-white/5 p-1 rounded-lg">
-                                {(['Husband', 'Wife'] as const).map(role => (
-                                    <button
-                                        key={role}
-                                        onClick={() => setEditingAccount({...editingAccount, owner: role})}
-                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
-                                            editingAccount.owner === role
-                                            ? (role === 'Husband' ? 'bg-indigo-600 text-white' : 'bg-pink-600 text-white')
-                                            : 'text-gray-400 hover:text-white'
-                                        }`}
-                                    >
-                                        {role}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Group</label>
-                            <select 
-                                value={editingAccount.group}
-                                onChange={e => setEditingAccount({...editingAccount, group: e.target.value as any})}
-                                className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary"
-                            >
-                                <option value="Bank Accounts">Bank Account</option>
-                                <option value="Cash">Cash</option>
-                                <option value="Credit Cards">Credit Card</option>
-                                <option value="Investments">Investment</option>
-                            </select>
-                        </div>
-                        {/* Di dalam Edit Account Modal */}
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Current Balance</label>
-                            {/* GANTI INPUT BIASA DENGAN INI */}
-                            <CurrencyInput 
-                                value={editingAccount.balance}
-                                onChange={val => setEditingAccount({...editingAccount, balance: parseFloat(val) || 0})}
-                                currency={currency}
-                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">* Adjusting this creates a correction transaction.</p>
-                        </div>
-                        
-                        <button 
-                            onClick={handleSaveAccountEdit}
-                            className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl mt-4"
-                        >
-                            Save Changes
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* --- AUTH MODAL --- */}
-        {showAuthModal && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-8 text-center animate-in zoom-in-95">
-                    <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6 text-primary">
-                        {authMode === 'LOGIN' ? <LogIn className="w-8 h-8" /> : <UserPlus className="w-8 h-8" />}
-                    </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">{authMode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}</h2>
-                    <p className="text-gray-400 text-sm mb-6">
-                        {authMode === 'LOGIN' ? 'Login to access your local data.' : 'Register to secure your local data.'}
+                    <p className="text-sm text-gray-400 text-center mb-6">
+                        Buat 6 digit PIN untuk mengamankan data keuangan Anda. PIN ini akan tersinkronisasi ke semua perangkat.
                     </p>
                     
-                    {authError && (
-                        <div className="bg-red-500/10 text-red-400 text-xs p-3 rounded-lg mb-4 border border-red-500/20 text-left">
-                            <div className="flex gap-2 items-start">
-                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                                <span>{authError}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-3 mb-6 text-left">
-                        {authMode === 'REGISTER' && (
-                            <div>
-                                <label className="text-xs text-gray-500 font-bold ml-1">Name</label>
-                                <input 
-                                    type="text" 
-                                    value={regName}
-                                    onChange={e => setRegName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                    placeholder="Your Name"
-                                />
-                            </div>
-                        )}
-                        <div>
-                            <label className="text-xs text-gray-500 font-bold ml-1">Email</label>
-                            <input 
-                                type="email" 
-                                value={regEmail}
-                                onChange={e => setRegEmail(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                placeholder="name@email.com"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-500 font-bold ml-1">Password</label>
-                            <div className="relative">
-                                <input 
-                                    type={showPassword ? "text" : "password"} 
-                                    value={regPass}
-                                    onChange={e => setRegPass(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary pr-10"
-                                    placeholder="••••••"
-                                />
-                                <button 
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                                >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
+                    <div className="flex justify-center mb-6">
+                        <input 
+                            type="text" 
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={newPinInput}
+                            onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))} // Hanya angka
+                            className="bg-black/50 border border-emerald-500/50 text-white text-3xl font-bold tracking-[0.5em] text-center w-full py-4 rounded-xl outline-none focus:border-emerald-500"
+                            placeholder="••••••"
+                            autoFocus
+                        />
                     </div>
 
-                    <div className="space-y-3">
-                        {authMode === 'LOGIN' ? (
-                            <button onClick={handleLocalLogin} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
-                                Log In (Local)
-                            </button>
-                        ) : (
-                            <button onClick={handleRegister} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/20">
-                                Register (Local)
-                            </button>
-                        )}
-                    </div>
-                    
-                    <div className="mt-6 pt-6 border-t border-white/10">
-                        <button onClick={() => { setAuthMode(authMode === 'LOGIN' ? 'REGISTER' : 'LOGIN'); setAuthError(''); }} className="text-sm text-gray-400 hover:text-white">
-                            {authMode === 'LOGIN' ? "Don't have an account? Register" : "Already have an account? Log In"}
-                        </button>
-                    </div>
-                    <button onClick={() => setShowAuthModal(false)} className="mt-4 text-xs text-gray-600 hover:text-gray-400">Cancel</button>
+                    <button 
+                        onClick={handleCreatePin}
+                        disabled={newPinInput.length !== 6}
+                        className="w-full py-3 bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all"
+                    >
+                        Simpan PIN
+                    </button>
                 </div>
             </div>
         )}
+        
+        {/* ... Modal Auth (Biarkan kode lama) ... */}
 
-        {/* --- ADD ACCOUNT MODAL (NEW) --- */}
-        {showAddAccountModal && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-                <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-white">Create Account</h3>
-                        <button onClick={() => setShowAddAccountModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
-                    </div>
-                    
-                    <div className="space-y-4">
-                        {/* Nama Akun */}
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label>
-                            <input 
-                                type="text"
-                                value={newAccName}
-                                onChange={e => setNewAccName(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                placeholder="e.g. BCA Tabungan"
-                                autoFocus
-                            />
-                        </div>
-
-                        {/* Owner Selection */}
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label>
-                            <div className="flex bg-white/5 p-1 rounded-lg">
-                                {(['Husband', 'Wife'] as const).map(role => (
-                                    <button
-                                        key={role}
-                                        onClick={() => setNewAccOwner(role)}
-                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
-                                            newAccOwner === role
-                                            ? (role === 'Husband' ? 'bg-indigo-600 text-white' : 'bg-pink-600 text-white')
-                                            : 'text-gray-400 hover:text-white'
-                                        }`}
-                                    >
-                                        {role === 'Husband' ? 'Suami' : 'Istri'}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                
-                        {/* Initial Balance (Optional) */}
-                        <div>
-                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Initial Balance (Optional)</label>
-                            <CurrencyInput 
-                                value={newAccBalance}
-                                onChange={val => setNewAccBalance(val)}
-                                currency={currency}
-                                className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right"
-                                placeholder="0"
-                            />
-                        </div>
-                        
-                        <button 
-                            onClick={handleSubmitNewAccount}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-4 shadow-lg shadow-emerald-900/20"
-                        >
-                            Create Account
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
     </Layout>
   );
 };

@@ -3,6 +3,49 @@ import { NonProfitAccount, NonProfitTransaction, Account, AccountOwner } from '.
 import { UserCircle2, Landmark, Plus, X, ArrowDownRight, Pencil, CheckCircle2, AlertCircle, BellRing, Trash2 } from 'lucide-react';
 import { format, endOfMonth, isSameMonth, parseISO } from 'date-fns';
 
+// === TAMBAHAN: DEFINISI CurrencyInput DI SINI AGAR TIDAK ERROR ===
+interface CurrencyInputProps {
+    value: string | number;
+    onChange: (val: string) => void;
+    currency: 'IDR' | 'USD';
+    placeholder?: string;
+    className?: string;
+    autoFocus?: boolean;
+}
+
+const CurrencyInput = ({ value, onChange, currency, className, ...props }: CurrencyInputProps) => {
+    const formatDisplay = (val: string | number) => {
+        if (!val) return '';
+        const digits = val.toString().replace(/\D/g, ''); 
+        if (!digits) return '';
+        return new Intl.NumberFormat(currency === 'IDR' ? 'id-ID' : 'en-US').format(BigInt(digits));
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value.replace(/\D/g, '');
+        onChange(raw);
+    };
+
+    return (
+        <div className="relative w-full">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <span className={`font-bold ${currency === 'IDR' ? 'text-emerald-500' : 'text-blue-500'}`}>
+                    {currency === 'IDR' ? 'Rp' : '$'}
+                </span>
+            </div>
+            <input
+                type="text"
+                inputMode="numeric"
+                value={formatDisplay(value)}
+                onChange={handleChange}
+                className={`w-full pl-12 pr-4 ${className}`}
+                {...props}
+            />
+        </div>
+    );
+};
+// ================================================================
+
 interface NonProfitProps {
   accounts: NonProfitAccount[];
   transactions: NonProfitTransaction[];
@@ -51,7 +94,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
 
   const t = (key: string) => {
     const dict: any = {
-      'title': lang === 'en' ? 'Hajj & Umrah Fund' : 'Hajj & Umrah Fund',
+      'title': lang === 'en' ? 'Hajj & Umrah Fund' : 'Tabungan Haji & Umrah',
       'total': lang === 'en' ? 'Total Savings' : 'Total Tabungan',
       'history': lang === 'en' ? 'History' : 'Riwayat',
       'add': lang === 'en' ? 'Deposit' : 'Setor',
@@ -175,15 +218,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
-      {/* HEADER dengan Dynamic Blending & Padding Lebih Besar */}
+      {/* HEADER dengan Dynamic Blending */}
       <div className="p-6 pt-32 pb-60 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
-         {/* LAYER 1: Dynamic Color Blending */}
          <div 
             className="absolute inset-0 opacity-20 mix-blend-hard-light"
             style={{ background: `linear-gradient(to bottom right, var(--color-primary), transparent)` }}
          ></div>
-        
-         {/* LAYER 2: Pattern */}
          <div className="absolute top-0 right-0 p-4 opacity-10 mix-blend-overlay">
             <div className="w-32 h-32 bg-white rotate-45 border-4 border-white/50"></div>
          </div>
@@ -361,7 +401,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                 type="button"
                                 onClick={() => setSourceType('TRANSFER')}
                                 className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${sourceType === 'TRANSFER' ? 'text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                                style={sourceType === 'TRANSFER' ? { backgroundColor: '#3b82f6' } : {}} // Transfer tetap biru agar beda
+                                style={sourceType === 'TRANSFER' ? { backgroundColor: '#3b82f6' } : {}} 
                              >
                                 {t('transfer')}
                              </button>
@@ -410,23 +450,21 @@ const NonProfit: React.FC<NonProfitProps> = ({
                              </div>
                          )}
                     </div>
-                    {/* BAGIAN AMOUNT (Update inputMode) */}
-                    {/* ... code sebelumnya ... */}
-                    {/* Di dalam NonProfit.tsx -> Modal Deposit */}
+                    
+                    {/* AMOUNT INPUT (FIXED SYNTAX & IMPORT) */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
-                        {/* GUNAKAN CurrencyInput DI SINI JUGA */}
                         <CurrencyInput 
                             value={amount}
                             onChange={val => setAmount(val)}
-                            currency={lang === 'id' ? 'IDR' : 'USD'} // Atau terima prop currency dari parent
-                            className={`bg-[#18181b] border rounded-xl p-4 text-2xl font-bold outline-none text-right ...`}
+                            currency={lang === 'id' ? 'IDR' : 'USD'} 
+                            className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600"
                             placeholder="0"
                             autoFocus
                         />
                     </div>
 
-                    {/* BAGIAN NOTE (Date dihapus, Note jadi full width) */}
+                    {/* NOTES INPUT */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
                         <input 
@@ -438,7 +476,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         />
                     </div>
                     
-                    {/* TOMBOL SAVE (DYNAMIC COLOR) */}
                     <button 
                         type="submit" 
                         disabled={!amount || isInsufficientBalance} 
@@ -461,10 +498,11 @@ const NonProfit: React.FC<NonProfitProps> = ({
                     <p className="text-xs text-gray-400 mt-1">{targetAccount.name}</p>
                 </div>
                 <form onSubmit={handleEditBalanceSubmit} className="space-y-4">
-                    <input 
-                        type="number"
+                    {/* REUSE CURRENCY INPUT DISINI JUGA */}
+                    <CurrencyInput 
                         value={editBalanceValue}
-                        onChange={e => setEditBalanceValue(e.target.value)}
+                        onChange={val => setEditBalanceValue(val)}
+                        currency={lang === 'id' ? 'IDR' : 'USD'}
                         className="w-full bg-black/30 border border-white/20 rounded-xl p-4 text-2xl font-bold text-amber-500 text-center outline-none focus:border-amber-500"
                     />
                     <div className="flex gap-3 pt-2">
