@@ -54,7 +54,8 @@ interface NonProfitProps {
   onUpdateBalance: (accountId: string, newBalance: number) => void;
   onComplete: (accountId: string) => void;
   onClearHistory: () => void;
-  onAddAccount: (name: string, owner: AccountOwner, target: number) => void;
+  // UPDATE: Tambah parameter initialBalance
+  onAddAccount: (name: string, owner: AccountOwner, target: number, initialBalance: number) => void;
   onDeleteAccount: (id: string) => void;
   lang?: 'en' | 'id';
   currency?: string;
@@ -82,6 +83,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
   const [newFundType, setNewFundType] = useState<'Haji' | 'Umrah'>('Haji');
   const [newOwner, setNewOwner] = useState<AccountOwner>('Husband');
   const [newTarget, setNewTarget] = useState('');
+  const [newInitialBalance, setNewInitialBalance] = useState(''); // State Baru
 
   // Alert State
   const [showMonthlyReminder, setShowMonthlyReminder] = useState(false);
@@ -110,6 +112,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'create_title': lang === 'en' ? 'Create Hajj/Umrah Fund' : 'Buat Tabungan Haji/Umrah',
       'fund_type': lang === 'en' ? 'Fund Type' : 'Jenis Tabungan',
       'target': lang === 'en' ? 'Target Amount' : 'Target Dana',
+      'initial_balance': lang === 'en' ? 'Initial Balance' : 'Saldo Awal', // Baru
       'save': lang === 'en' ? 'Save' : 'Simpan',
       'cancel': lang === 'en' ? 'Cancel' : 'Batal',
       'husband': lang === 'en' ? 'Husband' : 'Suami',
@@ -189,14 +192,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
     setAmount(''); setNotes(''); setSourceType('MANUAL');
   };
 
-  // --- LOGIC EDIT SALDO BARU (ANTI-DEFICIT & AUTO HISTORY) ---
   const handleEditBalanceSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if(targetAccount && editBalanceValue) {
           const newBal = parseFloat(editBalanceValue);
           const oldBal = targetAccount.balance;
           
-          // 1. Validasi Anti-Defisit
           if (newBal < oldBal) {
               alert(lang === 'en' 
                   ? "Cannot decrease balance. Edit amount must be higher than current balance." 
@@ -204,21 +205,17 @@ const NonProfit: React.FC<NonProfitProps> = ({
               return;
           }
 
-          // 2. Hitung Selisih
           const diff = newBal - oldBal;
-
-          // 3. Buat Transaksi Adjustment Otomatis (Jika ada kenaikan)
           if (diff > 0) {
               onAddTransaction({
                   id: `adj_${Date.now()}`,
                   date: new Date().toISOString(),
                   amount: diff,
                   accountId: targetAccount.id,
-                  notes: 'Manual Adjustment' // Keterangan otomatis
+                  notes: 'Manual Adjustment'
               });
           }
 
-          // 4. Update Saldo
           onUpdateBalance(targetAccount.id, newBal);
           setShowEditModal(false);
           setTargetAccount(null);
@@ -236,9 +233,11 @@ const NonProfit: React.FC<NonProfitProps> = ({
           : 'Umrah';
       const finalName = `${typeStr} ${ownerStr}`;
 
-      onAddAccount(finalName, newOwner, parseFloat(newTarget) || 0);
+      // Kirim initialBalance juga
+      onAddAccount(finalName, newOwner, parseFloat(newTarget) || 0, parseFloat(newInitialBalance) || 0);
       setShowCreateModal(false);
       setNewTarget('');
+      setNewInitialBalance(''); // Reset
   };
 
   const handleCompleteSubmit = () => {
@@ -355,15 +354,12 @@ const NonProfit: React.FC<NonProfitProps> = ({
                                     </div>
                                     
                                     <div className="flex flex-col gap-0.5 min-w-0">
-                                        {/* Baris 1: Nama Akun (Haji Suami / Umrah Istri) */}
                                         <span className="text-sm font-bold text-white">
                                             {acc?.name} 
                                         </span>
-                                        {/* Baris 2: Tanggal */}
                                         <span className="text-xs text-gray-500">
                                             {format(new Date(tx.date), 'dd MMM yyyy')}
                                         </span>
-                                        {/* Baris 3: Notes (Topup / Edit manual / dll) */}
                                         <span className="text-xs text-gray-400 truncate italic">
                                             {tx.notes || t('add')}
                                         </span>
@@ -391,7 +387,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
                 <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-white">{t('create_title')}</h3><button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5 text-gray-400"/></button></div>
                 <form onSubmit={handleCreateSubmit} className="space-y-4">
                     
-                    {/* TYPE SELECTOR (GANTI FUND NAME TEXT INPUT) */}
+                    {/* TYPE SELECTOR */}
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('fund_type')}</label>
                         <div className="flex bg-white/5 p-1 rounded-lg">
@@ -408,6 +404,19 @@ const NonProfit: React.FC<NonProfitProps> = ({
                         </div>
                     </div>
                     <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('target')}</label><CurrencyInput value={newTarget} onChange={val => setNewTarget(val)} currency={currency} className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right" placeholder="0" /></div>
+                    
+                    {/* INPUT SALDO AWAL (BARU) */}
+                    <div>
+                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('initial_balance')}</label>
+                        <CurrencyInput 
+                            value={newInitialBalance} 
+                            onChange={val => setNewInitialBalance(val)} 
+                            currency={currency} 
+                            className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right" 
+                            placeholder="0" 
+                        />
+                    </div>
+
                     <button type="submit" className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"><Plus className="w-4 h-4"/> {t('create_btn')}</button>
                 </form>
             </div>

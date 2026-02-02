@@ -688,16 +688,28 @@ const App = () => {
       if (confirm('Clear Hajj/Umrah history?')) setNonProfitTransactions([]);
   };
 
-  // --- FUNGSI TAMBAH AKUN HAJI (BARU) ---
-  const handleAddNonProfitAccount = (name: string, owner: AccountOwner, target: number) => {
+  // --- FUNGSI TAMBAH AKUN HAJI (UPDATED) ---
+  const handleAddNonProfitAccount = (name: string, owner: AccountOwner, target: number, initialBalance: number) => {
       const newAcc: NonProfitAccount = {
           id: `np_${Date.now()}`,
           name: name,
           owner: owner,
-          balance: 0,
+          balance: initialBalance, // Set saldo awal
           target: target
       };
       setNonProfitAccounts(prev => [...prev, newAcc]);
+
+      // OTOMATIS buat riwayat transaksi jika ada saldo awal
+      if (initialBalance > 0) {
+          const initTx: NonProfitTransaction = {
+              id: `init_${Date.now()}`,
+              date: new Date().toISOString(),
+              amount: initialBalance,
+              accountId: newAcc.id,
+              notes: 'Saldo Awal'
+          };
+          setNonProfitTransactions(prev => [...prev, initTx]);
+      }
   };
 
   // --- FUNGSI HAPUS AKUN HAJI (BARU) ---
