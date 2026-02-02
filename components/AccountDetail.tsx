@@ -89,13 +89,14 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-gray-300" /></button>
                     <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h2 className="font-bold text-lg text-white">{account.name}</h2>
-                            <span className="text-gray-500 text-sm hidden sm:inline">-</span>
-                            <span className={`text-lg font-bold ${account.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {/* NAMA AKUN & SALDO: Text SM & Font Medium (Tidak Bold) */}
+                            <h2 className="font-bold text-sm text-white">{account.name}</h2>
+                            <span className="text-gray-500 text-xs hidden sm:inline">-</span>
+                            <span className={`text-sm font-medium ${account.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                                 {formatCurrency(account.balance)}
                             </span>
                         </div>
-                        <p className="text-xs text-gray-500">{account.group}</p>
+                        <p className="text-[10px] text-gray-500">{account.group}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -119,26 +120,26 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400"><ChevronRight className="w-5 h-5" /></button>
                 </div>
 
-                {/* SUMMARY BOX */}
+                {/* SUMMARY BOX: Text XS & Font Medium */}
                 <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
                     <div className="flex flex-col items-center text-center">
                         <span className="text-[10px] text-gray-400">In</span>
-                        <span className="text-xs font-bold text-emerald-400 truncate w-full">{formatCurrency(stats.income)}</span>
+                        <span className="text-xs font-medium text-emerald-400 truncate w-full">{formatCurrency(stats.income)}</span>
                     </div>
                     <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
                         <span className="text-[10px] text-gray-400">Out</span>
-                        <span className="text-xs font-bold text-rose-400 truncate w-full">{formatCurrency(stats.expense)}</span>
+                        <span className="text-xs font-medium text-rose-400 truncate w-full">{formatCurrency(stats.expense)}</span>
                     </div>
                     <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
                         <span className="text-[10px] text-gray-400">Change</span>
-                        <span className={`text-xs font-bold truncate w-full ${stats.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <span className={`text-xs font-medium truncate w-full ${stats.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net)}
                         </span>
                     </div>
                 </div>
             </div>
 
-            {/* TRANSACTION LIST (COMPACT TEXT-XS) */}
+            {/* TRANSACTION LIST */}
             <div className="flex-1 divide-y divide-white/10">
                 {filteredTx.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-500 gap-2"><CalendarIcon className="w-8 h-8 opacity-20" /><span className="text-xs">No transactions in this period</span></div>
@@ -169,8 +170,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                                         {getIcon(tx.type, tx.category)}
                                     </div>
                                     <div className="overflow-hidden min-w-0">
-                                        {/* TITLE: TEXT-XS FONT-BOLD */}
-                                        <p className="text-xs font-bold text-gray-200 truncate pr-2">
+                                        <p className="text-xs font-medium text-gray-200 truncate pr-2">
                                             {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
                                         </p>
                                         <div className="text-[10px] text-gray-500 mt-0.5">
@@ -178,10 +178,9 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                                         </div>
                                     </div>
                                 </div>
-                                
-                                {/* AMOUNT: TEXT-XS FONT-BOLD */}
                                 <div className="text-right">
-                                    <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
+                                    {/* NOMINAL LIST: Text XS & Font Medium */}
+                                    <p className={`text-xs font-medium whitespace-nowrap ${amountColor}`}>
                                         {sign}{formatCurrency(displayAmount)}
                                     </p>
                                     {tx.notes && !isAdjustment && <p className="text-[10px] text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}

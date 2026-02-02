@@ -191,10 +191,22 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
+        {/* SUMMARY BOX: Text XS & Font Medium */}
         <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
-            <div className="flex flex-col items-center text-center"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span><span className="text-xs font-bold text-emerald-400 truncate w-full">{formatCurrency(summary.income)}</span></div>
-            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span><span className="text-xs font-bold text-rose-400 truncate w-full">{formatCurrency(summary.expense)}</span></div>
-            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span><span className={`text-xs font-bold truncate w-full ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</span></div>
+            <div className="flex flex-col items-center text-center">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span>
+                <span className="text-xs font-medium text-emerald-400 truncate w-full">{formatCurrency(summary.income)}</span>
+            </div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span>
+                <span className="text-xs font-medium text-rose-400 truncate w-full">{formatCurrency(summary.expense)}</span>
+            </div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span>
+                <span className={`text-xs font-medium truncate w-full ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                    {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
+                </span>
+            </div>
         </div>
       </div>
       
@@ -203,7 +215,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         {filteredTransactions.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
                {searchQuery ? <Search className="w-8 h-8 opacity-20" /> : <Calendar className="w-8 h-8 opacity-20" />}
-               <span className="text-xs">{searchQuery ? (lang === 'en' ? 'No results found' : 'Tidak ada hasil') : (lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi')}</span>
+               <span className="text-xs">
+                   {searchQuery ? (lang === 'en' ? 'No results found' : 'Tidak ada hasil') : (lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi')}
+               </span>
            </div>
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
