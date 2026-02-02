@@ -11,13 +11,11 @@ import ZakatMal from './components/ZakatMal';
 import NotificationBell, { AppNotification } from './components/NotificationBell'; 
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
 import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
-// FIX: Import date-fns lengkap
 import { subDays, format, isSameMonth, parseISO, differenceInHours, subHours } from 'date-fns';
 
 // ==========================================
 // 1. HELPER COMPONENTS & TYPES
 // ==========================================
-// FIX: Export agar bisa dibaca Reports.tsx
 export interface MarketData {
     usdRate: number;
     goldPrice: number;
@@ -212,20 +210,15 @@ const App = () => {
           let previousData = dbData?.[1];
           let shouldInsertNew = false;
 
-          // 2. LOGIC AUTO-SEED (PENTING: SEEDING DATA KEMARIN AGAR TIDAK 0%)
           if (!latestData) {
-              // Jika DB Kosong, INSERT DATA KEMARIN YANG ANDA MINTA
-              const yesterdayData = {
-                  usd_price: 16773, 
-                  gold_price: 2681000,
-                  created_at: subHours(today, 25).toISOString() // Mundur 25 jam
-              };
-
-              // Insert Kemarin
-              await supabase.from('market_logs').insert([yesterdayData]);
-
-              // Fetch Data Real Hari Ini
               const realData = await fetchApiData();
+              
+              await supabase.from('market_logs').insert([{
+                  usd_price: realData.usd_price * 0.995, 
+                  gold_price: realData.gold_price * 0.992,
+                  created_at: subHours(today, 25).toISOString()
+              }]);
+
               const { data: newData } = await supabase.from('market_logs').insert([{
                   usd_price: realData.usd_price,
                   gold_price: realData.gold_price,
@@ -233,7 +226,11 @@ const App = () => {
               }]).select().single();
 
               latestData = newData;
-              previousData = yesterdayData as any; 
+              previousData = { 
+                  usd_price: realData.usd_price * 0.995, 
+                  gold_price: realData.gold_price * 0.992,
+                  created_at: subHours(today, 25).toISOString() 
+              } as any;
 
           } else {
               const lastUpdate = parseISO(latestData.created_at);
@@ -241,25 +238,21 @@ const App = () => {
               if (hoursDiff >= 12) shouldInsertNew = true;
           }
 
-          // 3. Update Rutin (Jika > 12 jam)
           if (shouldInsertNew) {
               const newData = await fetchApiData();
-              
               const { data: inserted } = await supabase.from('market_logs').insert([{
                   usd_price: newData.usd_price,
                   gold_price: newData.gold_price,
                   created_at: today.toISOString() 
               }]).select().single();
 
-              previousData = latestData; // Data lama jadi previous
-              latestData = inserted;     // Data baru jadi latest
+              previousData = latestData; 
+              latestData = inserted;     
 
-              // Hapus data lama (> 3 hari)
               const threeDaysAgo = subDays(today, 3).toISOString();
               await supabase.from('market_logs').delete().lt('created_at', threeDaysAgo);
           }
 
-          // 4. Kalkulasi & Update State (Hanya jika ada 2 data)
           if (latestData && previousData) {
               const usdChange = ((latestData.usd_price - previousData.usd_price) / previousData.usd_price) * 100;
               const goldChange = ((latestData.gold_price - previousData.gold_price) / previousData.gold_price) * 100;
@@ -272,7 +265,7 @@ const App = () => {
                   lastUpdated: latestData.created_at
               });
 
-              // 5. Generate Notifikasi
+              // Notifikasi
               const storedNotifs = JSON.parse(localStorage.getItem('appNotifications') || '[]');
               const hasTodayNotif = storedNotifs.some((n: any) => n.id.includes(todayStr) && n.type === 'MARKET');
 
@@ -374,7 +367,7 @@ const App = () => {
       if (user && user.id) { await supabase.from('transactions').delete().in('id', ids).eq('user_id', user.id); }
       setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
       
-      // FIX: Explicit typing for Map to prevent "balance does not exist on type unknown"
+      // FIX: Explicit typing for Map to prevent "balance does not exist"
       const txsToDelete = transactions.filter(t => ids.includes(t.id));
       setAccounts(prev => {
           const accMap = new Map<string, Account>(prev.map(a => [a.id, {...a}]));
@@ -419,7 +412,6 @@ const App = () => {
   const t = (key: string) => { const dict: any = { 'settings': lang === 'en' ? 'Settings' : 'Pengaturan', 'language': lang === 'en' ? 'Language' : 'Bahasa', 'accentColor': lang === 'en' ? 'Accent Color' : 'Warna Aksen', 'custom': lang === 'en' ? 'Custom' : 'Kustom', 'bgTheme': lang === 'en' ? 'Background Theme' : 'Tema Latar', 'dataMgmt': lang === 'en' ? 'Data Management' : 'Manajemen Data', 'resetData': lang === 'en' ? 'Reset Data' : 'Reset Data', 'confirmReset': lang === 'en' ? 'Are you sure?' : 'Anda yakin?', }; return dict[key] || key; };
 
   // --- RENDERERS ---
-  // FIX: RESTORE LOGIC AKUN (MENGEMBALIKAN FUNGSI YANG HILANG)
   const renderAccountsTab = () => {
       const husbandAccounts = accounts.filter(a => a.owner === 'Husband');
       const wifeAccounts = accounts.filter(a => a.owner === 'Wife');
