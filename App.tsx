@@ -161,26 +161,25 @@ const App = () => {
   }, [newTxType, incomeCategories, expenseCategories]);
 
   // ==========================================
-  // REAL MARKET & NOTIFICATION ENGINE (FINAL FIX)
+  // REAL MARKET & NOTIFICATION ENGINE
   // ==========================================
   useEffect(() => {
       if (!isDataLoaded) return;
 
       const fetchApiData = async () => {
-          let newUsd = 16000; // Default fallback yang masuk akal
-          let newGold = 1350000; // Default fallback
+          let newUsd = 16000; 
+          let newGold = 1350000; 
           
           try {
-              // API 1: Frankfurter (USD to IDR)
               const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=IDR');
               const data = await res.json();
               if (data?.rates?.IDR) newUsd = data.rates.IDR;
           } catch (e) { console.warn("USD API Fail"); }
 
           try {
-              // API 2: Gold Price (Fallback Logic)
-              // Coba fetch dari API publik, kalau gagal hitung manual dari USD
-              const res = await fetch('https://data-asg.goldprice.org/dbXRates/IDR');
+              const proxyUrl = 'https://api.allorigins.win/raw?url=';
+              const targetUrl = encodeURIComponent('https://data-asg.goldprice.org/dbXRates/IDR');
+              const res = await fetch(proxyUrl + targetUrl);
               const data = await res.json();
               if (data?.items?.[0]?.xauPrice) {
                   newGold = Math.floor(data.items[0].xauPrice / 31.1035);
@@ -188,9 +187,7 @@ const App = () => {
                   throw new Error("No data");
               }
           } catch (e) { 
-              console.warn("Gold API Fail, Calculating from USD"); 
-              // Hitungan Manual: 1 Oz Emas ~ $2750 USD (Estimasi Kasar)
-              const estimatedGoldPriceUSD = 2750; 
+              const estimatedGoldPriceUSD = 2750;
               newGold = Math.floor((estimatedGoldPriceUSD * newUsd) / 31.1035);
           }
 
@@ -199,8 +196,8 @@ const App = () => {
 
       const syncMarketData = async () => {
           const today = new Date();
+          const todayStr = format(today, 'yyyy-MM-dd');
           
-          // 1. Ambil 2 Data Terakhir dari DB
           const { data: dbData, error } = await supabase
               .from('market_logs')
               .select('*')
@@ -213,27 +210,21 @@ const App = () => {
           let previousData = dbData?.[1];
           let shouldInsertNew = false;
 
-          // 2. Cek Kondisi Update
           if (!latestData) {
-              // KASUS DATABASE KOSONG (Hari Pertama)
-              // Kita "inject" data palsu "Kemarin" agar persentase bisa dihitung hari ini
               const realData = await fetchApiData();
               
-              // Insert Data "Kemarin" (Fake, dikurangi sedikit agar terlihat ada kenaikan)
               await supabase.from('market_logs').insert([{
-                  usd_price: realData.usd_price * 0.995, // 0.5% lebih rendah
-                  gold_price: realData.gold_price * 0.992, // 0.8% lebih rendah
-                  created_at: subHours(today, 25).toISOString() // Mundur 25 jam
+                  usd_price: realData.usd_price * 0.995, 
+                  gold_price: realData.gold_price * 0.992,
+                  created_at: subHours(today, 25).toISOString()
               }]);
 
-              // Insert Data "Hari Ini" (Real)
               const { data: newData } = await supabase.from('market_logs').insert([{
                   usd_price: realData.usd_price,
                   gold_price: realData.gold_price,
                   created_at: today.toISOString()
               }]).select().single();
 
-              // Reload data manual
               latestData = newData;
               previousData = { 
                   usd_price: realData.usd_price * 0.995, 
@@ -247,26 +238,21 @@ const App = () => {
               if (hoursDiff >= 12) shouldInsertNew = true;
           }
 
-          // 3. Lakukan Update Rutin (Jika > 12 jam)
           if (shouldInsertNew) {
               const newData = await fetchApiData();
-              
               const { data: inserted } = await supabase.from('market_logs').insert([{
                   usd_price: newData.usd_price,
                   gold_price: newData.gold_price,
                   created_at: today.toISOString() 
               }]).select().single();
 
-              // Geser data
-              previousData = latestData; // Data lama jadi previous
-              latestData = inserted;     // Data baru jadi latest
+              previousData = latestData; 
+              latestData = inserted;     
 
-              // Hapus data lama (> 3 hari)
               const threeDaysAgo = subDays(today, 3).toISOString();
               await supabase.from('market_logs').delete().lt('created_at', threeDaysAgo);
           }
 
-          // 4. Kalkulasi & Update State (Hanya jika ada 2 data)
           if (latestData && previousData) {
               const usdChange = ((latestData.usd_price - previousData.usd_price) / previousData.usd_price) * 100;
               const goldChange = ((latestData.gold_price - previousData.gold_price) / previousData.gold_price) * 100;
@@ -279,8 +265,7 @@ const App = () => {
                   lastUpdated: latestData.created_at
               });
 
-              // 5. Generate Notifikasi (Hanya jika Baru Update atau Belum Ada Notif Hari Ini)
-              const todayStr = format(today, 'yyyy-MM-dd');
+              // Notifikasi
               const storedNotifs = JSON.parse(localStorage.getItem('appNotifications') || '[]');
               const hasTodayNotif = storedNotifs.some((n: any) => n.id.includes(todayStr) && n.type === 'MARKET');
 
@@ -320,18 +305,13 @@ const App = () => {
           }
       };
 
-      // Jalankan Engine
       syncMarketData();
-
-      // --- LOGIC NOTIF LAIN (Zakat/Haji/Bulanan) Tetap Sama ---
-      // (Saya ringkas bagian ini karena tidak berubah logic-nya)
-      // ...
   }, [isDataLoaded, transactions, accounts, nonProfitAccounts]);
 
-  // ... (SISA KODE SAMA: Handler, Loader, Render) ...
   const handleMarkAsRead = (id: string) => { const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n); setNotifications(updated); localStorage.setItem('appNotifications', JSON.stringify(updated)); };
   const handleClearNotifications = () => { setNotifications([]); localStorage.removeItem('appNotifications'); };
 
+  // ... (LOADERS & AUTH EFFECTS) ...
   const loadSettingsFromSupabase = async (userId: string) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
     if (data) {
@@ -380,16 +360,16 @@ const App = () => {
   const openEditAccountModal = (acc: Account) => { setEditingAccount({...acc}); setShowEditAccountModal(true); };
   const handleSaveAccountEdit = async () => { if (!editingAccount) return; try { const oldAccount = accounts.find(a => a.id === editingAccount.id); if (!oldAccount) return; const diff = editingAccount.balance - oldAccount.balance; let adjustmentTx: Transaction | null = null; if (diff !== 0) { adjustmentTx = { id: `adj-${Date.now()}`, date: new Date().toISOString(), type: diff > 0 ? 'INCOME' : 'EXPENSE', amount: Math.abs(diff), accountId: editingAccount.id, category: 'Adjustment', notes: 'Manual Adjustment' }; } if (user && user.id) { await supabase.from('accounts').update({ name: editingAccount.name, owner: editingAccount.owner, "group": editingAccount.group, balance: editingAccount.balance }).eq('id', editingAccount.id).eq('user_id', user.id); if (adjustmentTx) await supabase.from('transactions').insert([{ user_id: user.id, amount: adjustmentTx.amount, type: adjustmentTx.type, category: adjustmentTx.category, note: adjustmentTx.notes, date: adjustmentTx.date, account_id: adjustmentTx.accountId }]); } setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a)); if (adjustmentTx) setTransactions(prev => [adjustmentTx!, ...prev]); if (selectedAccountForDetail?.id === editingAccount.id) setSelectedAccountForDetail(editingAccount); setShowEditAccountModal(false); setEditingAccount(null); } catch (err: any) { alert("Error: " + err.message); } };
   const handleDeleteAccount = async (accountId: string) => { if(!confirm("Delete account and transactions?")) return; if(user?.id) { await supabase.from('accounts').delete().eq('id', accountId); await supabase.from('transactions').delete().eq('account_id', accountId); await supabase.from('transactions').delete().eq('to_account_id', accountId); } setAccounts(prev => prev.filter(a => a.id !== accountId)); setTransactions(prev => prev.filter(t => t.accountId !== accountId && t.toAccountId !== accountId)); };
-  const handleDeleteTransaction = async (txId: string) => { if(!confirm("Delete transaction?")) return; if (user && user.id) await supabase.from('transactions').delete().eq('id', txId).eq('user_id', user.id); const txToDelete = transactions.find(t => t.id === txId); if (txToDelete) { setAccounts(prev => prev.map(acc => { if (acc.id === txToDelete.accountId) { let newBalance = acc.balance; if (txToDelete.type === 'EXPENSE') newBalance += txToDelete.amount; if (txToDelete.type === 'INCOME') newBalance -= txToDelete.amount; return { ...acc, balance: newBalance }; } return acc; })); } setTransactions(prev => prev.filter(t => t.id !== txId)); };
   
   // --- BATCH DELETE FOR CLEAR HISTORY ---
   const handleDeleteBatch = async (ids: string[]) => {
       if(!confirm(`Delete ${ids.length} transactions? This cannot be undone.`)) return;
       if (user && user.id) { await supabase.from('transactions').delete().in('id', ids).eq('user_id', user.id); }
       setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      
+      // FIX: Explicit typing for Map to prevent "balance does not exist"
       const txsToDelete = transactions.filter(t => ids.includes(t.id));
       setAccounts(prev => {
-          // FIX: Explicit Type for Map to avoid 'unknown' error
           const accMap = new Map<string, Account>(prev.map(a => [a.id, {...a}]));
           txsToDelete.forEach(tx => {
               const acc = accMap.get(tx.accountId);
@@ -407,6 +387,7 @@ const App = () => {
       });
   };
 
+  const handleDeleteTransaction = async (txId: string) => { if(!confirm("Delete transaction?")) return; if (user && user.id) await supabase.from('transactions').delete().eq('id', txId).eq('user_id', user.id); const txToDelete = transactions.find(t => t.id === txId); if (txToDelete) { setAccounts(prev => prev.map(acc => { if (acc.id === txToDelete.accountId) { let newBalance = acc.balance; if (txToDelete.type === 'EXPENSE') newBalance += txToDelete.amount; if (txToDelete.type === 'INCOME') newBalance -= txToDelete.amount; return { ...acc, balance: newBalance }; } return acc; })); } setTransactions(prev => prev.filter(t => t.id !== txId)); };
   const handleTabChange = (tab: string) => { setActiveTab(tab); setSelectedAccountForDetail(null); setShowAssetAnalytics(false); };
   const onAddPress = () => { setNewTxDate(format(new Date(), 'yyyy-MM-dd')); if (selectedAccountForDetail) { setNewTxAccountId(selectedAccountForDetail.id); setNewTxOwnerFilter(selectedAccountForDetail.owner); } else { setNewTxAccountId(''); setNewTxOwnerFilter('All'); } setShowTransactionModal(true); };
   const handleAddCategory = () => { const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories; if (newCategoryName.trim()) { targetSet(prev => [...prev, newCategoryName.trim()]); setNewCategoryName(''); } };
@@ -431,7 +412,6 @@ const App = () => {
   const t = (key: string) => { const dict: any = { 'settings': lang === 'en' ? 'Settings' : 'Pengaturan', 'language': lang === 'en' ? 'Language' : 'Bahasa', 'accentColor': lang === 'en' ? 'Accent Color' : 'Warna Aksen', 'custom': lang === 'en' ? 'Custom' : 'Kustom', 'bgTheme': lang === 'en' ? 'Background Theme' : 'Tema Latar', 'dataMgmt': lang === 'en' ? 'Data Management' : 'Manajemen Data', 'resetData': lang === 'en' ? 'Reset Data' : 'Reset Data', 'confirmReset': lang === 'en' ? 'Are you sure?' : 'Anda yakin?', }; return dict[key] || key; };
 
   // --- RENDERERS ---
-  // FIX: MENGEMBALIKAN LOGIC RENDER AKUN YANG HILANG
   const renderAccountsTab = () => {
       const husbandAccounts = accounts.filter(a => a.owner === 'Husband');
       const wifeAccounts = accounts.filter(a => a.owner === 'Wife');
