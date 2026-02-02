@@ -79,7 +79,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
   
   // Create Account State
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newFundType, setNewFundType] = useState<'Haji' | 'Umrah'>('Haji');
   const [newOwner, setNewOwner] = useState<AccountOwner>('Husband');
   const [newTarget, setNewTarget] = useState('');
 
@@ -108,7 +108,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
       'title': lang === 'en' ? 'Hajj & Umrah Fund' : 'Tabungan Haji & Umrah',
       'create_btn': lang === 'en' ? 'New Fund' : 'Buat Tabungan',
       'create_title': lang === 'en' ? 'Create Hajj/Umrah Fund' : 'Buat Tabungan Haji/Umrah',
-      'fund_name': lang === 'en' ? 'Fund Name' : 'Nama Tabungan',
+      'fund_type': lang === 'en' ? 'Fund Type' : 'Jenis Tabungan',
       'target': lang === 'en' ? 'Target Amount' : 'Target Dana',
       'save': lang === 'en' ? 'Save' : 'Simpan',
       'cancel': lang === 'en' ? 'Cancel' : 'Batal',
@@ -148,10 +148,6 @@ const NonProfit: React.FC<NonProfitProps> = ({
     checkMonthlyDeposit();
   }, [transactions]);
 
-  const selectedSourceAccount = mainAccounts.find(a => a.id === sourceMainAccountId);
-  const numericAmount = parseFloat(amount) || 0;
-  const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
-
   const handleOpenDeposit = (accountId: string) => {
       setSelectedAccountId(accountId);
       const targetAcc = accounts.find(a => a.id === accountId);
@@ -175,24 +171,55 @@ const NonProfit: React.FC<NonProfitProps> = ({
 
   const handleDepositSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const numericAmount = parseFloat(amount) || 0;
+    const selectedSourceAccount = mainAccounts.find(a => a.id === sourceMainAccountId);
+    const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
+
     if (!amount || !selectedAccountId || isInsufficientBalance) return;
     
     onAddTransaction({
         id: Math.random().toString(36).substr(2, 9),
         date: new Date().toISOString(),
-        amount: parseFloat(amount),
+        amount: numericAmount,
         accountId: selectedAccountId,
-        notes: notes + (sourceType === 'TRANSFER' ? ' (Transfer)' : '')
+        notes: notes || (sourceType === 'TRANSFER' ? 'Transfer' : 'Deposit')
     }, sourceType === 'TRANSFER' ? sourceMainAccountId : undefined);
 
     setShowAddModal(false);
     setAmount(''); setNotes(''); setSourceType('MANUAL');
   };
 
+  // --- LOGIC EDIT SALDO BARU (ANTI-DEFICIT & AUTO HISTORY) ---
   const handleEditBalanceSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if(targetAccount && editBalanceValue) {
-          onUpdateBalance(targetAccount.id, parseFloat(editBalanceValue));
+          const newBal = parseFloat(editBalanceValue);
+          const oldBal = targetAccount.balance;
+          
+          // 1. Validasi Anti-Defisit
+          if (newBal < oldBal) {
+              alert(lang === 'en' 
+                  ? "Cannot decrease balance. Edit amount must be higher than current balance." 
+                  : "Saldo tidak boleh diedit menjadi lebih kecil dari sebelumnya.");
+              return;
+          }
+
+          // 2. Hitung Selisih
+          const diff = newBal - oldBal;
+
+          // 3. Buat Transaksi Adjustment Otomatis (Jika ada kenaikan)
+          if (diff > 0) {
+              onAddTransaction({
+                  id: `adj_${Date.now()}`,
+                  date: new Date().toISOString(),
+                  amount: diff,
+                  accountId: targetAccount.id,
+                  notes: 'Manual Adjustment' // Keterangan otomatis
+              });
+          }
+
+          // 4. Update Saldo
+          onUpdateBalance(targetAccount.id, newBal);
           setShowEditModal(false);
           setTargetAccount(null);
       }
@@ -200,11 +227,18 @@ const NonProfit: React.FC<NonProfitProps> = ({
 
   const handleCreateSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      if (newName) {
-          onAddAccount(newName, newOwner, parseFloat(newTarget) || 0);
-          setShowCreateModal(false);
-          setNewName(''); setNewTarget('');
-      }
+      
+      const ownerStr = newOwner === 'Husband' 
+          ? (lang === 'en' ? 'Husband' : 'Suami') 
+          : (lang === 'en' ? 'Wife' : 'Istri');
+      const typeStr = newFundType === 'Haji' 
+          ? (lang === 'en' ? 'Hajj' : 'Haji') 
+          : 'Umrah';
+      const finalName = `${typeStr} ${ownerStr}`;
+
+      onAddAccount(finalName, newOwner, parseFloat(newTarget) || 0);
+      setShowCreateModal(false);
+      setNewTarget('');
   };
 
   const handleCompleteSubmit = () => {
@@ -227,6 +261,11 @@ const NonProfit: React.FC<NonProfitProps> = ({
   };
 
   const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+
+  // Helper untuk cek validasi modal deposit
+  const numericAmount = parseFloat(amount) || 0;
+  const selectedSourceAccount = mainAccounts.find(a => a.id === sourceMainAccountId);
+  const isInsufficientBalance = sourceType === 'TRANSFER' && selectedSourceAccount && numericAmount > selectedSourceAccount.balance;
 
   return (
     <div className="flex flex-col h-full bg-background pb-20 overflow-y-auto">
@@ -292,7 +331,7 @@ const NonProfit: React.FC<NonProfitProps> = ({
             )}
         </div>
 
-        {/* --- RIWAYAT TRANSAKSI (LAYOUT BARU) --- */}
+        {/* --- RIWAYAT TRANSAKSI (LAYOUT VERTIKAL LENGKAP) --- */}
         <div className="space-y-3 pb-8">
             <div className="flex justify-between items-end px-1">
                 <h3 className="text-gray-400 font-bold text-sm uppercase tracking-wider">{t('history')}</h3>
@@ -311,30 +350,28 @@ const NonProfit: React.FC<NonProfitProps> = ({
                             <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
                                 {/* KIRI: Icon & Info Vertikal */}
                                 <div className="flex items-center gap-4 overflow-hidden flex-1">
-                                    {/* Icon Box */}
                                     <div className={`p-2 rounded-full shrink-0 ${isCompletion ? 'bg-amber-500/10' : 'bg-white/5'}`}>
                                         {isCompletion ? <CheckCircle2 className="w-5 h-5 text-amber-500" /> : <ArrowDownRight className="w-5 h-5" style={{ color: 'var(--color-primary)' }} />}
                                     </div>
                                     
-                                    {/* Teks Vertikal */}
                                     <div className="flex flex-col gap-0.5 min-w-0">
-                                        {/* Baris 1: Pemilik (Suami/Istri) */}
+                                        {/* Baris 1: Nama Akun (Haji Suami / Umrah Istri) */}
                                         <span className="text-sm font-bold text-white">
-                                            {acc?.owner === 'Husband' ? t('husband') : (acc?.owner === 'Wife' ? t('wife') : acc?.name)}
+                                            {acc?.name} 
                                         </span>
                                         {/* Baris 2: Tanggal */}
                                         <span className="text-xs text-gray-500">
                                             {format(new Date(tx.date), 'dd MMM yyyy')}
                                         </span>
-                                        {/* Baris 3: Notes / Type */}
+                                        {/* Baris 3: Notes (Topup / Edit manual / dll) */}
                                         <span className="text-xs text-gray-400 truncate italic">
                                             {tx.notes || t('add')}
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* KANAN: Nominal (Rata Kanan) */}
-                                <div className="text-right pl-4 shrink-0">
+                                {/* KANAN: Nominal */}
+                                <div className="text-right pl-4 shrink-0 ml-auto">
                                     <span className={`font-bold text-sm block ${isCompletion ? 'text-gray-400' : ''}`} style={{ color: isCompletion ? undefined : 'var(--color-primary)' }}>
                                         {isCompletion ? 'COMPLETED' : `+${formatCurrency(tx.amount)}`}
                                     </span>
@@ -353,10 +390,25 @@ const NonProfit: React.FC<NonProfitProps> = ({
             <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-white">{t('create_title')}</h3><button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5 text-gray-400"/></button></div>
                 <form onSubmit={handleCreateSubmit} className="space-y-4">
-                    <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('fund_name')}</label><input type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary" placeholder="e.g. Haji Suami" autoFocus /></div>
-                    <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label><div className="flex bg-white/5 p-1 rounded-lg"><button type="button" onClick={() => setNewOwner('Husband')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newOwner === 'Husband' ? 'bg-indigo-600 text-white' : 'text-gray-400'}`}>{t('husband')}</button><button type="button" onClick={() => setNewOwner('Wife')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newOwner === 'Wife' ? 'bg-pink-600 text-white' : 'text-gray-400'}`}>{t('wife')}</button></div></div>
+                    
+                    {/* TYPE SELECTOR (GANTI FUND NAME TEXT INPUT) */}
+                    <div>
+                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('fund_type')}</label>
+                        <div className="flex bg-white/5 p-1 rounded-lg">
+                            <button type="button" onClick={() => setNewFundType('Haji')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newFundType === 'Haji' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}>Haji</button>
+                            <button type="button" onClick={() => setNewFundType('Umrah')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newFundType === 'Umrah' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}>Umrah</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Owner</label>
+                        <div className="flex bg-white/5 p-1 rounded-lg">
+                            <button type="button" onClick={() => setNewOwner('Husband')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newOwner === 'Husband' ? 'bg-indigo-600 text-white' : 'text-gray-400'}`}>{t('husband')}</button>
+                            <button type="button" onClick={() => setNewOwner('Wife')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newOwner === 'Wife' ? 'bg-pink-600 text-white' : 'text-gray-400'}`}>{t('wife')}</button>
+                        </div>
+                    </div>
                     <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('target')}</label><CurrencyInput value={newTarget} onChange={val => setNewTarget(val)} currency={currency} className="bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary font-bold text-lg text-right" placeholder="0" /></div>
-                    <button type="submit" disabled={!newName} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"><Plus className="w-4 h-4"/> {t('create_btn')}</button>
+                    <button type="submit" className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"><Plus className="w-4 h-4"/> {t('create_btn')}</button>
                 </form>
             </div>
         </div>
