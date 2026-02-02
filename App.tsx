@@ -688,6 +688,26 @@ const App = () => {
       if (confirm('Clear Hajj/Umrah history?')) setNonProfitTransactions([]);
   };
 
+  // --- FUNGSI TAMBAH AKUN HAJI (BARU) ---
+  const handleAddNonProfitAccount = (name: string, owner: AccountOwner, target: number) => {
+      const newAcc: NonProfitAccount = {
+          id: `np_${Date.now()}`,
+          name: name,
+          owner: owner,
+          balance: 0,
+          target: target
+      };
+      setNonProfitAccounts(prev => [...prev, newAcc]);
+  };
+
+  // --- FUNGSI HAPUS AKUN HAJI (BARU) ---
+  const handleDeleteNonProfitAccount = (id: string) => {
+      if (confirm(lang === 'en' ? 'Delete this fund and its history?' : 'Hapus tabungan ini beserta riwayatnya?')) {
+          setNonProfitAccounts(prev => prev.filter(acc => acc.id !== id));
+          setNonProfitTransactions(prev => prev.filter(tx => tx.accountId !== id));
+      }
+  };
+
   const t = (key: string) => {
     const dict: any = {
         'settings': lang === 'en' ? 'Settings' : 'Pengaturan',
@@ -797,7 +817,28 @@ const App = () => {
           case 'trans': return <TransactionHistory transactions={transactions} accounts={accounts} lang={lang} onSelectAccount={(acc) => setSelectedAccountForDetail(acc)} />;
           case 'stats': return <div className="h-full overflow-y-auto pb-24"><Reports transactions={transactions} accounts={accounts} lang={lang} /></div>;
           case 'accounts': return renderAccountsTab();
-          case 'non-profit': return <NonProfit accounts={nonProfitAccounts} transactions={nonProfitTransactions} mainAccounts={accounts} onClearHistory={handleClearHajjHistory} lang={lang} onAddTransaction={(tx, src) => { setNonProfitTransactions(prev => [...prev, tx]); setNonProfitAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance + tx.amount} : a)); if (src && tx.amount > 0) { const mainTx: Transaction = { id: 'tr-' + tx.id, date: tx.date, type: 'EXPENSE', amount: tx.amount, accountId: src, category: 'Non-Profit Transfer', notes: 'Transfer to ' + tx.accountId }; setTransactions(prev => [mainTx, ...prev]); setAccounts(prev => prev.map(a => a.id === src ? {...a, balance: a.balance - tx.amount} : a)); } }} onUpdateBalance={(id, bal) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: bal} : a))} onComplete={(id) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: 0} : a))} />;
+          case 'non-profit': 
+            return <NonProfit 
+                accounts={nonProfitAccounts} 
+                transactions={nonProfitTransactions} 
+                mainAccounts={accounts} 
+                onClearHistory={handleClearHajjHistory}
+                lang={lang} 
+                currency={currency} // <--- PASTIKAN INI ADA
+                onAddAccount={handleAddNonProfitAccount}
+                onDeleteAccount={handleDeleteNonProfitAccount}
+                onAddTransaction={(tx, src) => { 
+                    setNonProfitTransactions(prev => [...prev, tx]); 
+                    setNonProfitAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance + tx.amount} : a)); 
+                    if (src && tx.amount > 0) { 
+                        const mainTx: Transaction = { id: 'tr-' + tx.id, date: tx.date, type: 'EXPENSE', amount: tx.amount, accountId: src, category: 'Non-Profit Transfer', notes: 'Transfer to ' + tx.accountId }; 
+                        setTransactions(prev => [mainTx, ...prev]); 
+                        setAccounts(prev => prev.map(a => a.id === src ? {...a, balance: a.balance - tx.amount} : a)); 
+                    } 
+                }} 
+                onUpdateBalance={(id, bal) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: bal} : a))} 
+                onComplete={(id) => setNonProfitAccounts(prev => prev.map(a => a.id === id ? {...a, balance: 0} : a))} 
+            />;
           case 'zakat': return <ZakatMal accounts={accounts} transactions={transactions} onAddTransaction={(tx) => { setTransactions(prev => [tx, ...prev]); setAccounts(prev => prev.map(a => a.id === tx.accountId ? {...a, balance: a.balance - tx.amount} : a)); }} />;
           case 'more': return (
               <div className="p-4 space-y-4 overflow-y-auto h-full pb-24">
