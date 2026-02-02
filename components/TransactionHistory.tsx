@@ -198,7 +198,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         </div>
       </div>
       
-      {/* TRANSACTION LIST (COMPACT TEXT-XS) */}
+      {/* TRANSACTION LIST */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface transition-colors duration-300">
         {filteredTransactions.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
@@ -208,14 +208,12 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
             const isAdjustment = tx.category === 'Adjustment';
-            const isSurplus = isAdjustment && tx.type === 'INCOME';
-            const isDeficit = isAdjustment && tx.type === 'EXPENSE';
-
+            
             let amountColor = 'text-gray-200';
             let sign = '';
             
             if (isAdjustment) {
-                if (isDeficit) { amountColor = 'text-red-500'; sign = '-'; }
+                if (tx.type === 'EXPENSE') { amountColor = 'text-red-500'; sign = '-'; }
                 else { amountColor = 'text-emerald-500'; sign = '+'; }
             } else {
                 if (tx.type === 'EXPENSE') { amountColor = 'text-rose-500'; sign = '-'; }
@@ -230,30 +228,41 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                     onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
                 >
                 <div className="flex items-center gap-4 overflow-hidden">
+                    {/* ICON */}
                     <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
                         {getIcon(tx.type, tx.category)}
                     </div>
-                    <div className="overflow-hidden min-w-0">
-                        {/* TITLE: TEXT-XS FONT-BOLD */}
-                        <p className="text-xs font-bold text-gray-200 truncate pr-2">
+                    
+                    {/* CONTENT TENGAH: Vertical Layout */}
+                    <div className="overflow-hidden min-w-0 flex flex-col gap-0.5">
+                        {/* 1. Category / Title */}
+                        <p className="text-xs font-bold text-gray-200 truncate">
                             {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
                         </p>
-                        <div className="flex items-center text-[10px] text-gray-500 gap-2 flex-wrap">
-                            <span>{format(new Date(tx.date), 'dd MMM yyyy')}</span>
-                            <span className="hidden sm:inline">•</span>
-                            <span className="flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
-                                {getAccountName(tx.accountId)}
-                                {ownerFilter === 'All' && (() => {
-                                    const acc = accounts.find(a => a.id === tx.accountId);
-                                    if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
-                                })()}
-                                {tx.toAccountId && ` → ${getAccountName(tx.toAccountId)}`}
-                            </span>
+                        
+                        {/* 2. Date */}
+                        <p className="text-[10px] text-gray-500">
+                            {format(new Date(tx.date), 'dd MMM yyyy')}
+                        </p>
+
+                        {/* 3. Account Name */}
+                        <div className="flex items-center text-[10px] text-gray-400 gap-1 truncate">
+                            <span>{getAccountName(tx.accountId)}</span>
+                            {ownerFilter === 'All' && (() => {
+                                const acc = accounts.find(a => a.id === tx.accountId);
+                                if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
+                            })()}
+                            {tx.toAccountId && (
+                                <>
+                                    <span className="text-gray-600">→</span>
+                                    <span>{getAccountName(tx.toAccountId)}</span>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
                 
-                {/* AMOUNT: TEXT-XS FONT-BOLD */}
+                {/* AMOUNT */}
                 <div className="text-right shrink-0">
                     <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
                         {sign}{formatCurrency(tx.amount)}
