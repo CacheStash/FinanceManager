@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Trash2, Wrench } from 'lucide-react'; 
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Search, X } from 'lucide-react'; 
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
@@ -13,20 +13,31 @@ interface TransactionHistoryProps {
   accounts: Account[];
   lang?: 'en' | 'id';
   onSelectAccount?: (account: Account) => void;
-  onDelete?: (id: string) => void; 
 }
 
 type DateRange = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'LIFETIME' | 'CUSTOM';
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount, onDelete }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount }) => {
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
   const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
   const [cursorDate, setCursorDate] = useState(new Date()); 
   
+  // --- SEARCH STATE ---
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   useEffect(() => { setCursorDate(new Date()); }, [dateRange]);
+
+  // Focus input saat search dibuka
+  useEffect(() => {
+      if (showSearch && searchInputRef.current) {
+          searchInputRef.current.focus();
+      }
+  }, [showSearch]);
 
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown Account';
   
@@ -75,16 +86,30 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
+        // 1. Owner Filter
         let ownerMatch = true;
         if (ownerFilter !== 'All') {
             const account = accounts.find(a => a.id === tx.accountId);
             ownerMatch = account?.owner === ownerFilter;
         }
+
+        // 2. Date Filter
         const txDate = parseISO(tx.date);
         const dateMatch = isWithinInterval(txDate, { start, end });
-        return ownerMatch && dateMatch;
+
+        // 3. Search Filter (Category, Notes, Amount)
+        let searchMatch = true;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const cat = (tx.category || '').toLowerCase();
+            const note = (tx.notes || '').toLowerCase();
+            const amt = tx.amount.toString();
+            searchMatch = cat.includes(q) || note.includes(q) || amt.includes(q);
+        }
+
+        return ownerMatch && dateMatch && searchMatch;
     });
-  }, [transactions, accounts, ownerFilter, start, end]);
+  }, [transactions, accounts, ownerFilter, start, end, searchQuery]);
 
   const summary = useMemo(() => {
       let income = 0; let expense = 0;
@@ -114,22 +139,67 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-white/10 overflow-hidden flex flex-col h-full transition-colors duration-300">
       <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
-        <div className="flex justify-between items-center">
-             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                {lang === 'en' ? 'Transactions' : 'Transaksi'}
-            </h2>
+        
+        {/* --- 1. HEADER & SEARCH --- */}
+        <div className="flex justify-between items-center h-8">
+             {showSearch ? (
+                 <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-10 duration-200">
+                     <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input 
+                            ref={searchInputRef}
+                            type="text" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={lang === 'en' ? "Search transactions..." : "Cari transaksi..."}
+                            className="w-full bg-white/10 border border-white/10 rounded-lg py-1.5 pl-9 pr-3 text-sm text-white outline-none focus:border-primary"
+                        />
+                     </div>
+                     <button 
+                        onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+                        className="p-1.5 hover:bg-white/10 rounded-full text-gray-400"
+                     >
+                         <X className="w-5 h-5" />
+                     </button>
+                 </div>
+             ) : (
+                 <>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        {lang === 'en' ? 'Transactions' : 'Transaksi'}
+                    </h2>
+                    <button 
+                        onClick={() => setShowSearch(true)}
+                        className="p-2 hover:bg-white/10 rounded-full text-gray-400 transition-colors"
+                    >
+                        <Search className="w-5 h-5" />
+                    </button>
+                 </>
+             )}
         </div>
 
         <div className="flex flex-col gap-3">
+            {/* Owner Filter */}
             <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full">
                  {(['All', 'Husband', 'Wife'] as const).map(filter => (
                      <button key={filter} onClick={() => setOwnerFilter(filter)} className={`flex-1 py-1.5 rounded-md transition-all ${ownerFilter === filter ? 'bg-primary text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{t(filter)}</button>
                  ))}
             </div>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1">
+            {/* --- 2. DATE RANGE BUTTONS (AUTO FULL WIDTH) --- */}
+            {/* Ubah container jadi flex dan w-full, tombol jadi flex-1 */}
+            <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full gap-1 overflow-x-auto">
                 {(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'LIFETIME', 'CUSTOM'] as DateRange[]).map(r => (
-                    <button key={r} onClick={() => setDateRange(r)} className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${dateRange === r ? 'bg-white/10 text-white border-white/20' : 'bg-transparent text-gray-500 border-transparent hover:bg-white/5'}`}>{t(r)}</button>
+                    <button 
+                        key={r} 
+                        onClick={() => setDateRange(r)} 
+                        className={`flex-1 px-1 py-1.5 rounded-md transition-all whitespace-nowrap text-[10px] sm:text-xs ${
+                            dateRange === r 
+                            ? 'bg-white/10 text-white shadow' 
+                            : 'text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        {t(r)}
+                    </button>
                 ))}
             </div>
 
@@ -150,24 +220,40 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
+        {/* --- 3. SUMMARY TEXT CENTERED --- */}
         <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
-            <div className="flex flex-col"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span><span className="text-sm font-bold text-emerald-400 truncate">{formatCurrency(summary.income)}</span></div>
-            <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span><span className="text-sm font-bold text-rose-400 truncate">{formatCurrency(summary.expense)}</span></div>
-            <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span><span className={`text-sm font-bold truncate ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</span></div>
+            <div className="flex flex-col items-center text-center">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span>
+                <span className="text-sm font-bold text-emerald-400 truncate w-full">{formatCurrency(summary.income)}</span>
+            </div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Expense')}</span>
+                <span className="text-sm font-bold text-rose-400 truncate w-full">{formatCurrency(summary.expense)}</span>
+            </div>
+            <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Net')}</span>
+                <span className={`text-sm font-bold truncate w-full ${summary.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                    {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
+                </span>
+            </div>
         </div>
       </div>
       
-      {/* --- TRANSACTION LIST (UPDATED UI: CLEAN NO LABELS) --- */}
+      {/* --- TRANSACTION LIST --- */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/10 bg-surface transition-colors duration-300">
         {filteredTransactions.length === 0 ? (
-           <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">{lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi'}</span></div>
+           <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
+               {searchQuery ? <Search className="w-8 h-8 opacity-20" /> : <Calendar className="w-8 h-8 opacity-20" />}
+               <span className="text-xs">
+                   {searchQuery ? (lang === 'en' ? 'No results found' : 'Tidak ada hasil') : (lang === 'en' ? 'No transactions found' : 'Tidak ada transaksi')}
+               </span>
+           </div>
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
             const isAdjustment = tx.category === 'Adjustment';
             const isSurplus = isAdjustment && tx.type === 'INCOME';
             const isDeficit = isAdjustment && tx.type === 'EXPENSE';
 
-            // Menentukan Warna Text Amount
             let amountColor = 'text-gray-200';
             let sign = '';
             
@@ -183,15 +269,15 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             return (
                 <div 
                     key={tx.id} 
-                    className="p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
+                    className="relative p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
                     onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
                 >
+                {/* LEFT: Icon & Text */}
                 <div className="flex items-center gap-4 overflow-hidden">
                     <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
                         {getIcon(tx.type, tx.category)}
                     </div>
                     <div className="overflow-hidden min-w-0">
-                        {/* Judul: Jika Adjustment, tampilkan "Balance Adjustment", jika tidak tampilkan Category */}
                         <p className="font-medium text-gray-200 truncate pr-2">
                             {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
                         </p>
@@ -210,30 +296,14 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-3 pl-2 shrink-0">
-                    <div className="text-right">
-                        {/* AMOUNT: BERSIH TANPA LABEL, CUKUP WARNA */}
-                        <p className={`font-bold whitespace-nowrap ${amountColor}`}>
-                            {sign}{formatCurrency(tx.amount)}
-                        </p>
-                        
-                        {/* Notes ditampilkan kecil jika ada. Kalau adjustment, sembunyikan notes "Surplus/Deficit" yang panjang biar bersih */}
-                        {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
-                    </div>
-                    
-                    {onDelete && (
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                onDelete(tx.id);
-                            }}
-                            className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                            title="Delete Transaction"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    )}
+                {/* RIGHT: Amount (Absolute Clean) */}
+                <div className="text-right shrink-0">
+                    <p className={`font-bold whitespace-nowrap ${amountColor}`}>
+                        {sign}{formatCurrency(tx.amount)}
+                    </p>
+                    {tx.notes && !isAdjustment && <p className="text-xs text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
                 </div>
+                
                 </div>
           )})
         )}

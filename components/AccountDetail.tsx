@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction } from '../types';
-import { ArrowLeft, Edit, TrendingUp, TrendingDown, ArrowRightLeft, ArrowUpRight, ArrowDownRight, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Edit2, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Edit2, BarChart3, ChevronLeft, ChevronRight, Calendar, Wrench, ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, subDays, subWeeks, subMonths, subYears, addDays, addWeeks, addMonths, addYears } from 'date-fns';
 
 interface AccountDetailProps {
@@ -8,7 +8,7 @@ interface AccountDetailProps {
     transactions: Transaction[];
     onBack: () => void;
     onEdit: (account: Account) => void;
-    onViewStats: (account: Account) => void;
+    onViewStats?: (account: Account) => void;
 }
 
 type DateRange = 'DAILY' | 'MONTHLY' | 'YEARLY';
@@ -46,7 +46,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
 
     const filteredTx = useMemo(() => {
         return transactions.filter(tx => {
-            // Filter: Apakah transaksi ini melibatkan akun ini?
             const isRelevant = tx.accountId === account.id || tx.toAccountId === account.id;
             if (!isRelevant) return false;
 
@@ -58,10 +57,8 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
     const stats = useMemo(() => {
         let income = 0; let expense = 0;
         filteredTx.forEach(tx => {
-            // Hitung efek saldo ke akun ini
             let amount = 0;
             if (tx.accountId === account.id) {
-                // Uang Keluar (Expense / Transfer Out)
                 if (tx.type === 'INCOME') income += tx.amount;
                 else {
                     amount = tx.amount;
@@ -69,7 +66,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     else if(tx.type === 'EXPENSE') expense += amount;
                 }
             } else if (tx.toAccountId === account.id) {
-                // Uang Masuk (Transfer In)
                 income += tx.amount;
             }
         });
@@ -88,13 +84,21 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
 
     return (
         <div className="bg-surface h-full flex flex-col pb-20 overflow-y-auto transition-colors duration-300">
-            {/* Header */}
+            {/* --- 1. HEADER (Info Saldo Pindah Sini) --- */}
             <div className="p-4 border-b border-white/10 sticky top-0 bg-surface z-10 flex justify-between items-center transition-colors duration-300">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-gray-300" /></button>
                     <div>
-                        <h2 className="font-bold text-lg text-white">{account.name}</h2>
-                        <span className="text-xs text-gray-400">{account.group}</span>
+                        {/* Format: Nama Akun - Saldo */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h2 className="font-bold text-lg text-white">{account.name}</h2>
+                            <span className="text-gray-500 text-sm hidden sm:inline">-</span>
+                            <span className={`text-lg font-bold ${account.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                {formatCurrency(account.balance)}
+                            </span>
+                        </div>
+                        {/* Group info ditaruh bawah kecil */}
+                        <p className="text-xs text-gray-500">{account.group}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -118,16 +122,27 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                     <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-gray-400"><ChevronRight className="w-5 h-5" /></button>
                 </div>
 
-                {/* Summary Box */}
-                <div className="grid grid-cols-4 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
-                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">In</span><span className="text-xs font-bold text-emerald-400 truncate">{formatCurrency(stats.income)}</span></div>
-                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Out</span><span className="text-xs font-bold text-rose-400 truncate">{formatCurrency(stats.expense)}</span></div>
-                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Change</span><span className={`text-xs font-bold truncate ${stats.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net)}</span></div>
-                    <div className="flex flex-col border-l border-white/10 pl-2"><span className="text-[10px] text-gray-400">End Balance</span><span className="text-xs font-bold text-white truncate">{formatCurrency(account.balance)}</span></div>
+                {/* --- 2. SUMMARY BOX (CENTERED & 3 COLS) --- */}
+                <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <div className="flex flex-col items-center text-center">
+                        <span className="text-[10px] text-gray-400">In</span>
+                        <span className="text-xs font-bold text-emerald-400 truncate w-full">{formatCurrency(stats.income)}</span>
+                    </div>
+                    <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                        <span className="text-[10px] text-gray-400">Out</span>
+                        <span className="text-xs font-bold text-rose-400 truncate w-full">{formatCurrency(stats.expense)}</span>
+                    </div>
+                    <div className="flex flex-col items-center text-center border-l border-white/10 pl-2">
+                        <span className="text-[10px] text-gray-400">Change</span>
+                        <span className={`text-xs font-bold truncate w-full ${stats.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                            {stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net)}
+                        </span>
+                    </div>
+                    {/* End Balance DIHAPUS dari sini karena sudah pindah ke Header */}
                 </div>
             </div>
 
-            {/* Transaction List (UI DIPERBAIKI: Ikon Obeng & Warna Merah/Hijau Konsisten) */}
+            {/* Transaction List */}
             <div className="flex-1 divide-y divide-white/10">
                 {filteredTx.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-500 gap-2"><Calendar className="w-8 h-8 opacity-20" /><span className="text-xs">No transactions in this period</span></div>
@@ -139,19 +154,13 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ account, transactions, on
                         let sign = '';
                         let displayAmount = tx.amount;
 
-                        // 1. Logic Warna untuk SEMUA TIPE (Hijau = Masuk, Merah = Keluar)
                         if (tx.type === 'TRANSFER') {
                             if (tx.accountId === account.id) {
-                                // Transfer Keluar dari akun ini -> Merah
                                 amountColor = 'text-rose-500'; sign = '-';
                             } else {
-                                // Transfer Masuk ke akun ini -> Hijau
                                 amountColor = 'text-emerald-500'; sign = '+';
                             }
-                        } 
-                        // 2. Logic Adjustment & Expense/Income Biasa
-                        else {
-                            // Cek apakah Income atau Expense
+                        } else {
                             const isIncome = tx.type === 'INCOME';
                             amountColor = isIncome ? 'text-emerald-500' : 'text-rose-500';
                             sign = isIncome ? '+' : '-';
