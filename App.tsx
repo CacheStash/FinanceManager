@@ -366,7 +366,44 @@ const App = () => {
   const handleUpdateCategory = () => { const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories; if (editingCategory && editingCategory.name.trim()) { targetSet(prev => { const copy = [...prev]; copy[editingCategory.idx] = editingCategory.name.trim(); return copy; }); setEditingCategory(null); } };
   const handleDeleteCategory = (cat: string) => { if (confirm("Delete?")) { const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories; targetSet(prev => prev.filter(c => c !== cat)); } };
   
-  const handleSubmitTransaction = async () => { const amountVal = parseFloat(newTxAmount); if (!amountVal || !newTxAccountId) return alert("Invalid Input"); const nowISO = new Date().toISOString(); const newTx: Transaction = { id: `tx-${Date.now()}`, date: nowISO, type: newTxType, amount: amountVal, accountId: newTxAccountId, toAccountId: newTxType === 'TRANSFER' ? newTxToAccountId : undefined, category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory, notes: newTxNotes }; setTransactions(prev => [newTx, ...prev]); setAccounts(prev => prev.map(acc => { let balance = acc.balance; if (acc.id === newTxAccountId) { if (newTxType === 'INCOME') balance += amountVal; else balance -= amountVal; } if (newTxType === 'TRANSFER' && acc.id === newTxToAccountId) balance += amountVal; return { ...acc, balance }; })); setShowTransactionModal(false); setNewTxAmount(''); setNewTxNotes(''); if (user?.id) await supabase.from('transactions').insert([{ user_id: user.id, amount: amountVal, type: newTxType, category: newTx.category, note: newTxNotes, date: nowISO, account_id: newTxAccountId, to_account_id: newTx.toAccountId }]); };
+ const handleSubmitTransaction = async () => { 
+      const amountVal = parseFloat(newTxAmount); 
+      if (!amountVal || !newTxAccountId) return alert("Invalid Input"); 
+      
+      const nowISO = new Date().toISOString(); 
+      const newTx: Transaction = { id: `tx-${Date.now()}`, date: nowISO, type: newTxType, amount: amountVal, accountId: newTxAccountId, toAccountId: newTxType === 'TRANSFER' ? newTxToAccountId : undefined, category: newTxType === 'TRANSFER' ? 'Transfer' : newTxCategory, notes: newTxNotes }; 
+      
+      // Optimistic UI Update (Update layar dulu)
+      setTransactions(prev => [newTx, ...prev]); 
+      setAccounts(prev => prev.map(acc => { let balance = acc.balance; if (acc.id === newTxAccountId) { if (newTxType === 'INCOME') balance += amountVal; else balance -= amountVal; } if (newTxType === 'TRANSFER' && acc.id === newTxToAccountId) balance += amountVal; return { ...acc, balance }; })); 
+      
+      setShowTransactionModal(false); 
+      setNewTxAmount(''); 
+      setNewTxNotes(''); 
+
+      // INSERT KE SUPABASE
+      if (user && user.id) {
+          console.log("Mencoba insert transaksi...");
+          const { data, error } = await supabase.from('transactions').insert([{ 
+              user_id: user.id, 
+              amount: amountVal, 
+              type: newTxType, 
+              category: newTx.category, 
+              note: newTxNotes, // Pastikan kolom di DB bernama 'note' bukan 'notes'
+              date: nowISO, 
+              account_id: newTxAccountId, 
+              to_account_id: newTx.toAccountId 
+          }]).select();
+
+          if (error) {
+              console.error("Supabase Insert Error:", error);
+              alert("GAGAL MENYIMPAN KE SERVER: " + error.message);
+              // Rollback state lokal jika mau, atau biarkan user tau
+          } else {
+              console.log("Berhasil simpan ke DB:", data);
+          }
+      }
+  };
   
   // --- ACCOUNT GROUP MANAGEMENT ---
   const handleOpenAddAccountModal = () => { setNewAccName(''); setNewAccOwner('Husband'); setNewAccBalance(''); setShowAddAccountModal(true); setShowGroupManager(false); };
