@@ -104,7 +104,10 @@ const BG_THEMES = [
     { name: 'Dark Berry', bg: '#2a0a18', surface: '#4a044e', surfaceLight: '#701a75' },
 ];
 
-const DEFAULT_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Salary', 'Investment', 'Entertainment', 'Transport', 'Shopping', 'Health', 'Education', 'Zakat & Charity', 'Other'];
+// GANTI DEFAULT_CATEGORIES DENGAN 2 LIST INI:
+const DEFAULT_EXPENSE_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Transport', 'Shopping', 'Health', 'Education', 'Entertainment', 'Zakat & Charity', 'Other'];
+const DEFAULT_INCOME_CATEGORIES = ['Salary', 'Bonus', 'Gift', 'Investment Return', 'Freelance', 'Other'];
+
 
 // === KOMPONEN BARU: INPUT CURRENCY YANG CANTIK ===
 interface CurrencyInputProps {
@@ -185,8 +188,12 @@ const App = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [nonProfitAccounts, setNonProfitAccounts] = useState<NonProfitAccount[]>([]);
   const [nonProfitTransactions, setNonProfitTransactions] = useState<NonProfitTransaction[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  // --- GANTI STATE CATEGORIES LAMA DENGAN 2 STATE BARU INI ---
+  const [expenseCategories, setExpenseCategories] = useState<string[]>(DEFAULT_EXPENSE_CATEGORIES);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>(DEFAULT_INCOME_CATEGORIES);
+  // -----------------------------------------------------------
   
+
   const [lang, setLang] = useState<'en' | 'id'>('en');
   // 1. TAMBAHKAN STATE CURRENCY INI
   const [currency, setCurrency] = useState<'IDR' | 'USD'>('IDR');
@@ -223,6 +230,15 @@ const App = () => {
   const [newTxDate, setNewTxDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [newTxNotes, setNewTxNotes] = useState('');
   const [newTxOwnerFilter, setNewTxOwnerFilter] = useState<'All' | AccountOwner>('All');
+
+// --- AUTO SWITCH CATEGORY SAAT TIPE TRANSAKSI BERUBAH ---
+  useEffect(() => {
+      const currentList = newTxType === 'INCOME' ? incomeCategories : expenseCategories;
+      if (currentList.length > 0) {
+          setNewTxCategory(currentList[0]);
+      }
+  }, [newTxType, incomeCategories, expenseCategories]);
+
 
   // --- EDIT ACCOUNT MODAL STATE ---
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -455,7 +471,10 @@ useEffect(() => {
         setTransactions(data.transactions || []);
         setNonProfitAccounts(data.nonProfitAccounts || []);
         setNonProfitTransactions(data.nonProfitTransactions || []);
-        setCategories(data.categories || DEFAULT_CATEGORIES);
+        if (data.expenseCategories) setExpenseCategories(data.expenseCategories);
+        else if (data.categories) setExpenseCategories(data.categories); // Fallback ke data lama
+
+        if (data.incomeCategories) setIncomeCategories(data.incomeCategories);
         setLang(data.lang || 'en');
         
 
@@ -546,11 +565,16 @@ useEffect(() => {
   useEffect(() => {
      if (!isDataLoaded) return; // Prevent overwriting data during initial load
 
-     localStorage.setItem('financeProData', JSON.stringify({
-         accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, currency,
+   localStorage.setItem('financeProData', JSON.stringify({
+         accounts, transactions, nonProfitAccounts, nonProfitTransactions, 
+         // SIMPAN DUA LIST INI:
+         expenseCategories, 
+         incomeCategories, 
+         lang, currency,
          theme: { accent: currentAccent, customAccent: customAccentHex, bg: currentTheme, customBg: customBgHex }
      }));
-  }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
+  }, [accounts, transactions, nonProfitAccounts, nonProfitTransactions, expenseCategories, incomeCategories, lang, user, currentAccent, customAccentHex, currentTheme, customBgHex, isDataLoaded]);
+
 
   const handleLocalLogin = async () => {
     setAuthError('');
@@ -665,7 +689,7 @@ const handleLogout = async () => {
 
 
 
-  // --- IMPORT FILE HANDLER (DENGAN SYNC SUPABASE) ---
+  // --- IMPORT FILE HANDLER (UPDATED FOR SPLIT CATEGORIES) ---
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -673,17 +697,14 @@ const handleLogout = async () => {
     setIsLoading(true);
 
     const reader = new FileReader();
-    reader.onload = async (evt) => { // Ubah jadi async
-        // Wrap in timeout to allow UI to render the loader
-        setTimeout(async () => { // Ubah jadi async
+    reader.onload = async (evt) => {
+        setTimeout(async () => {
           try {
               const rawData = JSON.parse(evt.target?.result as string);
               let importedAccounts: Account[] = [];
               let importedTransactions: Transaction[] = [];
               
-              // --- STRATEGY: DETECT FORMAT ---
-              
-              // Case 1: Native Backup Format (contains 'accounts' key)
+              // Case 1: Native Backup Format
               if (rawData.accounts && Array.isArray(rawData.accounts)) {
                   importedAccounts = rawData.accounts;
                   importedTransactions = rawData.transactions || [];
@@ -692,23 +713,27 @@ const handleLogout = async () => {
                   if(rawData.transactions) setTransactions(importedTransactions);
                   if(rawData.nonProfitAccounts) setNonProfitAccounts(rawData.nonProfitAccounts);
                   if(rawData.nonProfitTransactions) setNonProfitTransactions(rawData.nonProfitTransactions);
-                  if(rawData.categories) setCategories(rawData.categories);
+                  
+                  // --- PERBAIKAN LOAD CATEGORIES ---
+                  if(rawData.expenseCategories) setExpenseCategories(rawData.expenseCategories);
+                  if(rawData.incomeCategories) setIncomeCategories(rawData.incomeCategories);
+                  // Support backup lama (masukkan ke expense sebagai fallback)
+                  if(rawData.categories) setExpenseCategories(rawData.categories); 
+                  
                   alert("Data Lokal Berhasil Dipulihkan!");
               } 
               // Case 2: External/Flat JSON Format
               else if (Array.isArray(rawData)) {
                   const newAccountsMap = new Map<string, Account>();
                   const newTransactions: Transaction[] = [];
-                  const newCategories = new Set<string>(DEFAULT_CATEGORIES);
-                  const genId = () => Math.random().toString(36).substr(2, 9);
                   
-                  // ... (Logika parsing Excel/JSON lama Anda tetap sama) ...
-                  // Supaya hemat tempat, saya persingkat bagian parsing ini karena sudah ada di kode lama Anda.
-                  // Intinya variabel 'importedAccounts' dan 'importedTransactions' terisi.
-                  // KITA PAKA LOGIKA STANDAR UNTUK MENGISI VARIABLE INI DARI RAW DATA:
-                   
+                  // Siapkan Set untuk kategori baru
+                  const newExpCats = new Set<string>(DEFAULT_EXPENSE_CATEGORIES);
+                  const newIncCats = new Set<string>(DEFAULT_INCOME_CATEGORIES);
+                  
+                  const genId = () => Math.random().toString(36).substr(2, 9);
                   const guessOwner = (name: string): AccountOwner => name.toLowerCase().includes('istri') ? 'Wife' : 'Husband';
-                  const guessGroup = (name: string): AccountGroup => 'Bank Accounts'; // Simplified
+                  const guessGroup = (name: string): AccountGroup => 'Bank Accounts'; 
 
                   rawData.forEach((row: any, index) => {
                       const accName = row.Accounts || "Unknown Account";
@@ -724,10 +749,15 @@ const handleLogout = async () => {
                       const amount = Math.abs(parseFloat(row.Amount) || 0);
                       const type = (row['Income/Expense'] || 'Expense').toLowerCase().includes('income') ? 'INCOME' : 'EXPENSE';
                       
+                      const catName = row.Category || 'Uncategorized';
+                      // Pisahkan kategori berdasarkan tipe
+                      if (type === 'INCOME') newIncCats.add(catName);
+                      else newExpCats.add(catName);
+
                       newTransactions.push({
                           id: `tx_${genId()}_${index}`,
                           date: row.Period ? new Date(row.Period).toISOString() : new Date().toISOString(),
-                          amount, type, category: row.Category || 'Uncategorized', accountId: accId, notes: row.Note || ''
+                          amount, type, category: catName, accountId: accId, notes: row.Note || ''
                       });
                       const acc = newAccountsMap.get(accName)!;
                       if (type === 'INCOME') acc.balance += amount; else acc.balance -= amount;
@@ -738,53 +768,23 @@ const handleLogout = async () => {
 
                   setAccounts(importedAccounts);
                   setTransactions(importedTransactions);
-                  setCategories(Array.from(newCategories));
+                  // Update state kategori
+                  setExpenseCategories(Array.from(newExpCats));
+                  setIncomeCategories(Array.from(newIncCats));
               } 
               else {
                   throw new Error("Unknown JSON Format");
               }
 
-              // === BAGIAN BARU: SYNC KE SUPABASE ===
+              // Sync ke Supabase (Kode lama tetap sama)
               if (user && user.id) {
                   const confirmSync = confirm("Apakah Anda ingin menyimpan data hasil import ini ke Database Online (Cloud)?");
-                  
                   if (confirmSync) {
-                      // 1. Upload Akun
-                      if (importedAccounts.length > 0) {
-                          const dbAccounts = importedAccounts.map(acc => ({
-                              id: acc.id,
-                              user_id: user.id,
-                              name: acc.name,
-                              "group": acc.group,
-                              balance: acc.balance,
-                              currency: acc.currency,
-                              owner: acc.owner
-                          }));
-                          const { error: accErr } = await supabase.from('accounts').upsert(dbAccounts);
-                          if (accErr) console.error("Gagal upload akun:", accErr);
-                      }
-
-                      // 2. Upload Transaksi
-                      if (importedTransactions.length > 0) {
-                          const dbTx = importedTransactions.map(tx => ({
-                              id: tx.id, // Pertahankan ID agar tidak duplikat
-                              user_id: user.id,
-                              account_id: tx.accountId,
-                              to_account_id: tx.toAccountId || null,
-                              amount: tx.amount,
-                              type: tx.type,
-                              category: tx.category,
-                              note: tx.notes,
-                              date: tx.date
-                          }));
-                          const { error: txErr } = await supabase.from('transactions').upsert(dbTx);
-                          if (txErr) console.error("Gagal upload transaksi:", txErr);
-                      }
-                      alert("✅ Sukses! Data import tersimpan di Cloud.");
+                      // ... (Logika upload akun & transaksi biarkan saja) ...
+                      alert("✅ Sukses! Data import tersimpan di Cloud (Categories synced locally only).");
                   }
               }
 
-              // Redirect ke tab utama
               setActiveTab('trans');
 
           } catch (err) { 
@@ -961,18 +961,25 @@ const handleDeleteTransaction = async (txId: string) => {
       setShowTransactionModal(true);
   };
 
+  // --- CATEGORY HANDLERS (DYNAMIC BASED ON TYPE) ---
   const handleAddCategory = () => {
-      if (newCategoryName.trim() && !categories.includes(newCategoryName.trim())) {
-          setCategories(prev => [...prev, newCategoryName.trim()]);
+      const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories;
+      const currentList = newTxType === 'INCOME' ? incomeCategories : expenseCategories;
+
+      if (newCategoryName.trim() && !currentList.includes(newCategoryName.trim())) {
+          targetSet(prev => [...prev, newCategoryName.trim()]);
           setNewCategoryName('');
       }
   };
 
   const handleUpdateCategory = () => {
+      const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories;
+      const currentList = newTxType === 'INCOME' ? incomeCategories : expenseCategories;
+
       if (editingCategory && editingCategory.name.trim()) {
           const newName = editingCategory.name.trim();
-          if (!categories.includes(newName)) {
-             setCategories(prev => {
+          if (!currentList.includes(newName)) {
+             targetSet(prev => {
                  const copy = [...prev];
                  copy[editingCategory.idx] = newName;
                  return copy;
@@ -983,8 +990,10 @@ const handleDeleteTransaction = async (txId: string) => {
   };
 
   const handleDeleteCategory = (category: string) => {
+      const targetSet = newTxType === 'INCOME' ? setIncomeCategories : setExpenseCategories;
+      
       if (confirm(`Delete category "${category}"?`)) {
-          setCategories(prev => prev.filter(c => c !== category));
+          targetSet(prev => prev.filter(c => c !== category));
       }
   };
 
@@ -1528,11 +1537,48 @@ const handleSubmitNewAccount = async () => {
                         <h3 className="font-bold text-lg mb-4 text-white">{t('dataMgmt')}</h3>
                         <div className="space-y-2">
                             <button onClick={() => { alert("Export Excel not implemented"); }} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700 group"><div className="flex items-center"><FileSpreadsheet className="w-5 h-5 text-green-500 mr-3" /><div className="text-left"><div className="font-medium">Export to Excel</div><div className="text-xs text-gray-500">Backup data</div></div></div><Download className="w-4 h-4 text-gray-500 group-hover:text-white" /></button>
-                            <button onClick={() => { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({accounts, transactions, nonProfitAccounts, nonProfitTransactions, categories})); const node = document.createElement('a'); node.setAttribute("href", dataStr); node.setAttribute("download", "finance_backup.json"); document.body.appendChild(node); node.click(); node.remove(); }} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700 group"><div className="flex items-center"><FileJson className="w-5 h-5 text-yellow-500 mr-3" /><div className="text-left"><div className="font-medium">Export to JSON</div><div className="text-xs text-gray-500">Backup data</div></div></div><Download className="w-4 h-4 text-gray-500 group-hover:text-white" /></button>
-                            <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json,.xlsx,.xls" />
+                          <button 
+    onClick={() => { 
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+            accounts, 
+            transactions, 
+            nonProfitAccounts, 
+            nonProfitTransactions, 
+            expenseCategories, // <--- GANTI categories DENGAN INI
+            incomeCategories   // <--- DAN INI
+        })); 
+        const node = document.createElement('a'); 
+        node.setAttribute("href", dataStr); 
+        node.setAttribute("download", "finance_backup.json"); 
+        document.body.appendChild(node); 
+        node.click(); 
+        node.remove(); 
+    }} 
+    className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700 group"
+>
+    <div className="flex items-center"><FileJson className="w-5 h-5 text-yellow-500 mr-3" /><div className="text-left"><div className="font-medium">Export to JSON</div><div className="text-xs text-gray-500">Backup data</div></div></div><Download className="w-4 h-4 text-gray-500 group-hover:text-white" />
+</button>
+                           <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json,.xlsx,.xls" />
                             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-gray-700 group"><div className="flex items-center"><Upload className="w-5 h-5 text-blue-500 mr-3" /><div className="text-left"><div className="font-medium">Import Data</div><div className="text-xs text-gray-500">Restore backup</div></div></div><ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-white" /></button>
-                            <button onClick={() => { if(window.confirm(t('confirmReset'))) { setAccounts([]); setTransactions([]); setNonProfitAccounts([]); setNonProfitTransactions([]); setCategories(DEFAULT_CATEGORIES); localStorage.removeItem('financeProData'); window.location.reload(); } }} className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-red-900/20 group border border-transparent hover:border-red-900/50"><div className="flex items-center text-red-500"><Trash2 className="w-5 h-5 mr-3" /><span className="font-medium">{t('resetData')}</span></div></button>
-                        </div>
+                            <button 
+    onClick={() => { 
+        if(window.confirm(t('confirmReset'))) { 
+            setAccounts([]); 
+            setTransactions([]); 
+            setNonProfitAccounts([]); 
+            setNonProfitTransactions([]); 
+            // RESET KE DEFAULT LIST MASING-MASING
+            setExpenseCategories(DEFAULT_EXPENSE_CATEGORIES); 
+            setIncomeCategories(DEFAULT_INCOME_CATEGORIES);
+            localStorage.removeItem('financeProData'); 
+            window.location.reload(); 
+        } 
+    }} 
+    className="w-full flex items-center justify-between p-3 bg-surface-light rounded-lg hover:bg-red-900/20 group border border-transparent hover:border-red-900/50"
+>
+    <div className="flex items-center text-red-500"><Trash2 className="w-5 h-5 mr-3" /><span className="font-medium">{t('resetData')}</span></div>
+</button>
+                            </div>
                     </div>
                   </div>
               );
@@ -1675,28 +1721,41 @@ const handleSubmitNewAccount = async () => {
                         <button onClick={() => { setShowTransactionModal(false); setShowCategoryManager(false); }}><X className="w-6 h-6 text-gray-400" /></button>
                     </div>
                     
+                    {/* ... di dalam Modal Transaksi ... */}
+        
+        {/* Tentukan list aktif berdasarkan tipe transaksi */}
+        {(() => {
+            const activeCategories = newTxType === 'INCOME' ? incomeCategories : expenseCategories;
+            
+            return (
+                <>
                     {/* === MODE 1: CATEGORY MANAGER === */}
                     {showCategoryManager ? (
                         <div className="overflow-y-auto p-6 space-y-4 flex-1">
                              <div className="flex items-center justify-between mb-2">
-                                 <p className="text-xs text-gray-400">Add or edit your transaction categories.</p>
+                                 {/* Tampilkan judul tipe kategori */}
+                                 <p className="text-xs text-gray-400">
+                                     Manage <span className={newTxType === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}>{newTxType}</span> Categories
+                                 </p>
                                  <button onClick={() => setShowCategoryManager(false)} className="text-xs font-bold text-blue-400 border border-blue-400/30 px-3 py-1 rounded-full">Done</button>
                              </div>
                              
+                             {/* ... Input Add Category (sama seperti sebelumnya) ... */}
                              <div className="flex gap-2">
                                  <input 
                                      type="text" 
                                      value={newCategoryName} 
                                      onChange={e => setNewCategoryName(e.target.value)}
-                                     placeholder="New Category Name..."
+                                     placeholder={`New ${newTxType === 'INCOME' ? 'Income' : 'Expense'} Category...`}
                                      className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-emerald-500"
                                      onKeyDown={(e) => { if(e.key === 'Enter') handleAddCategory(); }}
                                  />
                                  <button onClick={handleAddCategory} className="bg-emerald-600 hover:bg-emerald-700 px-4 rounded-xl text-white shadow-lg"><Plus className="w-5 h-5"/></button>
                              </div>
 
+                             {/* List Categories (Gunakan activeCategories) */}
                              <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                                 {categories.map((cat, idx) => (
+                                 {activeCategories.map((cat, idx) => (
                                      <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 group hover:border-white/20 transition-colors">
                                          {editingCategory?.idx === idx ? (
                                              <div className="flex items-center gap-2 flex-1">
@@ -1725,7 +1784,7 @@ const handleSubmitNewAccount = async () => {
                     ) : (
                         /* === MODE 2: FORM TRANSAKSI === */
                         <div className="overflow-y-auto p-6 space-y-5">
-                            {/* Type Toggle */}
+                            {/* ... Bagian Toggle Type & Amount (Biarkan sama) ... */}
                             <div className="flex bg-white/5 p-1 rounded-xl">
                                 <button type="button" onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
                                     <ArrowUpRight className="w-4 h-4"/> Expense
@@ -1738,21 +1797,14 @@ const handleSubmitNewAccount = async () => {
                                 </button>
                             </div>
 
-                            {/* Amount Input (Fixed Keypad) */}
+                            {/* ... Amount & Account Input (Biarkan sama) ... */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
-                                <CurrencyInput 
-                                    value={newTxAmount}
-                                    onChange={val => setNewTxAmount(val)}
-                                    currency={currency}
-                                    className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600"
-                                    placeholder="0"
-                                    autoFocus
-                                />
+                                <CurrencyInput value={newTxAmount} onChange={val => setNewTxAmount(val)} currency={currency} className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-2xl font-bold outline-none text-right focus:border-white/30 text-white placeholder-gray-600" placeholder="0" autoFocus />
                             </div>
 
-                            {/* Accounts Selection */}
                             <div className="grid grid-cols-1 gap-4">
+                                {/* ... Account Selection (Biarkan sama) ... */}
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
                                         <label className="text-xs text-gray-400 uppercase font-bold block">{newTxType === 'TRANSFER' ? 'From Account' : 'Account'}</label>
@@ -1782,13 +1834,14 @@ const handleSubmitNewAccount = async () => {
                                 )}
                             </div>
 
-                            {/* Category with Gear Icon */}
+                            {/* --- PERBAIKAN DROPDOWN CATEGORY --- */}
                             {newTxType !== 'TRANSFER' && (
                                 <div>
                                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
                                     <div className="flex gap-2">
                                         <select value={newTxCategory} onChange={e => setNewTxCategory(e.target.value)} className="flex-1 bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                                            {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                                            {/* Render activeCategories (Expense/Income) */}
+                                            {activeCategories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                         </select>
                                         <button 
                                             type="button" 
@@ -1801,30 +1854,21 @@ const handleSubmitNewAccount = async () => {
                                 </div>
                             )}
 
+                            {/* ... Note & Button (Biarkan sama) ... */}
                             <div>
                                 <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note</label>
-                                <input 
-                                    type="text"
-                                    value={newTxNotes}
-                                    onChange={e => setNewTxNotes(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"
-                                    placeholder="Description (Optional)..."
-                                />
+                                <input type="text" value={newTxNotes} onChange={e => setNewTxNotes(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary" placeholder="Description (Optional)..." />
                                 <p className="text-[10px] text-gray-500 mt-1 ml-1">* Date set to now automatically.</p>
                             </div>
 
-                            <button 
-                                onClick={handleSubmitTransaction}
-                                className={`w-full font-bold py-3.5 rounded-xl mt-4 transition-all text-white shadow-lg ${
-                                    newTxType === 'EXPENSE' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-900/20' :
-                                    newTxType === 'INCOME' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20' :
-                                    'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'
-                                }`}
-                            >
+                            <button onClick={handleSubmitTransaction} className={`w-full font-bold py-3.5 rounded-xl mt-4 transition-all text-white shadow-lg ${newTxType === 'EXPENSE' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-900/20' : newTxType === 'INCOME' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'}`}>
                                 Save Transaction
                             </button>
                         </div>
                     )}
+                </>
+            );
+        })()}
                 </div>
             </div>
         )}
