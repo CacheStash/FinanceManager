@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, Account, AccountOwner } from '../types';
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Search, X, Trash2 } from 'lucide-react'; 
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, RefreshCw, Calendar, ChevronLeft, ChevronRight, Wrench, Search, X, Trash2, MoreVertical } from 'lucide-react'; 
 import { 
   format, startOfDay, endOfDay, startOfWeek, endOfWeek, 
   startOfMonth, endOfMonth, startOfYear, endOfYear, 
@@ -14,11 +14,12 @@ interface TransactionHistoryProps {
   lang?: 'en' | 'id';
   onSelectAccount?: (account: Account) => void;
   onDelete?: (id: string) => void; 
+  onDeleteBatch?: (ids: string[]) => void; // New Prop
 }
 
 type DateRange = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'LIFETIME' | 'CUSTOM';
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount, onDelete }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, accounts, lang = 'en', onSelectAccount, onDelete, onDeleteBatch }) => {
   const [ownerFilter, setOwnerFilter] = useState<'All' | AccountOwner>('All');
   const [dateRange, setDateRange] = useState<DateRange>('MONTHLY');
   const [cursorDate, setCursorDate] = useState(new Date()); 
@@ -27,6 +28,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // --- DESKTOP MENU STATE ---
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -55,6 +59,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
       'Income': lang === 'en' ? 'Income' : 'Masuk',
       'Expense': lang === 'en' ? 'Expense' : 'Keluar',
       'Net': lang === 'en' ? 'Net' : 'Selisih',
+      'ClearHistory': lang === 'en' ? 'Clear History' : 'Hapus Riwayat',
     };
     return dict[key] || key;
   };
@@ -137,7 +142,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
       <div className="p-4 border-b border-white/10 flex flex-col gap-4 bg-surface transition-colors duration-300">
         
         {/* HEADER & SEARCH */}
-        {/* PERBAIKAN: Layout diubah agar search icon nempel di sebelah judul */}
         <div className="flex items-center h-8 gap-2">
              {showSearch ? (
                  <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-10 duration-200">
@@ -162,6 +166,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
              )}
         </div>
 
+        {/* FILTERS */}
         <div className="flex flex-col gap-3">
             <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full">
                  {(['All', 'Husband', 'Wife'] as const).map(filter => (
@@ -169,7 +174,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                  ))}
             </div>
 
-            <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full gap-1 overflow-x-auto">
+            <div className="bg-white/5 p-1 rounded-lg flex text-xs font-bold w-full gap-1 overflow-x-auto custom-scrollbar">
                 {(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'LIFETIME', 'CUSTOM'] as DateRange[]).map(r => (
                     <button key={r} onClick={() => setDateRange(r)} className={`flex-1 px-1 py-1.5 rounded-md transition-all whitespace-nowrap text-[10px] sm:text-xs ${dateRange === r ? 'bg-white/10 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>{t(r)}</button>
                 ))}
@@ -192,7 +197,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             </div>
         )}
 
-        {/* SUMMARY BOX: Text XS & Font Medium */}
+        {/* SUMMARY BOX */}
         <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
             <div className="flex flex-col items-center text-center">
                 <span className="text-[10px] text-gray-400 uppercase font-semibold">{t('Income')}</span>
@@ -209,6 +214,17 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
                 </span>
             </div>
         </div>
+
+        {/* CLEAR HISTORY BUTTON (NEW) */}
+        {filteredTransactions.length > 0 && onDeleteBatch && (
+            <button 
+                onClick={() => onDeleteBatch(filteredTransactions.map(t => t.id))}
+                className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg flex items-center justify-center gap-2 border border-red-500/20 transition-all"
+            >
+                <Trash2 className="w-3 h-3" />
+                {t('ClearHistory')} ({filteredTransactions.length})
+            </button>
+        )}
       </div>
       
       {/* TRANSACTION LIST */}
@@ -223,7 +239,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
             const isAdjustment = tx.category === 'Adjustment';
-            
             let amountColor = 'text-gray-200';
             let sign = '';
             
@@ -237,70 +252,99 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
             }
 
             return (
-                <div 
-                    key={tx.id} 
-                    className="relative p-4 hover:bg-white/5 transition-colors flex items-center justify-between group cursor-pointer active:bg-white/10 select-none"
-                    onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
-                >
-                <div className="flex items-center gap-4 overflow-hidden">
-                    {/* ICON */}
-                    <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
-                        {getIcon(tx.type, tx.category)}
-                    </div>
+                // WRAPPER: Scroll Container untuk Mobile Slide
+                <div key={tx.id} className="group relative flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide">
                     
-                    {/* CONTENT TENGAH: Vertical Layout */}
-                    <div className="overflow-hidden min-w-0 flex flex-col gap-0.5">
-                        {/* 1. Category / Title */}
-                        <p className="text-xs font-bold text-gray-200 truncate">
-                            {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
-                        </p>
+                    {/* CONTENT UTAMA (Width 100%) */}
+                    <div 
+                        className="w-full flex-shrink-0 snap-start flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer select-none border-b border-white/5"
+                        onDoubleClick={() => onSelectAccount && accounts.find(a => a.id === tx.accountId) && onSelectAccount(accounts.find(a => a.id === tx.accountId)!)}
+                    >
+                        <div className="flex items-center gap-4 overflow-hidden">
+                            <div className={`p-2 rounded-full ${isAdjustment ? 'bg-indigo-500/10' : 'bg-white/5'} shrink-0`}>
+                                {getIcon(tx.type, tx.category)}
+                            </div>
+                            
+                            <div className="overflow-hidden min-w-0 flex flex-col gap-0.5">
+                                <p className="text-xs font-bold text-gray-200 truncate">
+                                    {isAdjustment ? 'Balance Adjustment' : (tx.category || tx.type)}
+                                </p>
+                                <p className="text-[10px] text-gray-500">
+                                    {format(new Date(tx.date), 'dd MMM yyyy')}
+                                </p>
+                                <div className="flex items-center text-[10px] text-gray-400 gap-1 truncate">
+                                    <span>{getAccountName(tx.accountId)}</span>
+                                    {ownerFilter === 'All' && (() => {
+                                        const acc = accounts.find(a => a.id === tx.accountId);
+                                        if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
+                                    })()}
+                                    {tx.toAccountId && (
+                                        <>
+                                            <span className="text-gray-600">→</span>
+                                            <span>{getAccountName(tx.toAccountId)}</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                         
-                        {/* 2. Date */}
-                        <p className="text-[10px] text-gray-500">
-                            {format(new Date(tx.date), 'dd MMM yyyy')}
-                        </p>
+                        {/* RIGHT SIDE: Amount + Desktop Menu */}
+                        <div className="flex items-center gap-3">
+                            <div className="text-right shrink-0">
+                                <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
+                                    {sign}{formatCurrency(tx.amount)}
+                                </p>
+                                {tx.notes && !isAdjustment && <p className="text-[10px] text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
+                            </div>
 
-                        {/* 3. Account Name */}
-                        <div className="flex items-center text-[10px] text-gray-400 gap-1 truncate">
-                            <span>{getAccountName(tx.accountId)}</span>
-                            {ownerFilter === 'All' && (() => {
-                                const acc = accounts.find(a => a.id === tx.accountId);
-                                if (acc?.owner) return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acc.owner === 'Husband' ? 'bg-indigo-500' : 'bg-pink-500'}`} title={acc.owner}></span>
-                            })()}
-                            {tx.toAccountId && (
-                                <>
-                                    <span className="text-gray-600">→</span>
-                                    <span>{getAccountName(tx.toAccountId)}</span>
-                                </>
-                            )}
+                            {/* DESKTOP ONLY MENU */}
+                            <div className="hidden md:block relative">
+                                {openMenuId === tx.id ? (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onDelete && onDelete(tx.id); }}
+                                        className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded flex items-center animate-in slide-in-from-right-2 duration-200"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setOpenMenuId(tx.id); 
+                                            // Auto close after 3s
+                                            setTimeout(() => setOpenMenuId(null), 3000);
+                                        }}
+                                        className="text-gray-500 hover:text-white p-1 rounded hover:bg-white/10"
+                                    >
+                                        <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                {/* AMOUNT */}
-                <div className="text-right shrink-0">
-                    <p className={`text-xs font-bold whitespace-nowrap ${amountColor}`}>
-                        {sign}{formatCurrency(tx.amount)}
-                    </p>
-                    {tx.notes && !isAdjustment && <p className="text-[10px] text-gray-500 truncate max-w-[100px] ml-auto">{tx.notes}</p>}
-                </div>
-                
-                {onDelete && (
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation(); 
-                            onDelete(tx.id);
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-red-600/90 text-white rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0"
-                        title="Delete Transaction"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                )}
+
+                    {/* MOBILE SLIDE DELETE BUTTON (Off-canvas to right) */}
+                    <div className="flex-shrink-0 snap-end w-[80px] bg-red-600 flex items-center justify-center md:hidden">
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if(confirm("Delete transaction?")) onDelete && onDelete(tx.id);
+                            }}
+                            className="w-full h-full flex flex-col items-center justify-center text-white"
+                        >
+                            <Trash2 className="w-5 h-5 mb-1" />
+                            <span className="text-[10px] font-bold">Delete</span>
+                        </button>
+                    </div>
+
                 </div>
           )})
         )}
       </div>
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 };
