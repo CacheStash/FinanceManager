@@ -11,14 +11,11 @@ import ZakatMal from './components/ZakatMal';
 import NotificationBell, { AppNotification } from './components/NotificationBell'; 
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup } from './types';
 import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
-// FIX: Menambahkan parseISO
-import { subDays, format, isSameMonth, parseISO } from 'date-fns';
+import { subDays, format, isSameMonth, parseISO, differenceInHours } from 'date-fns';
 
 // ==========================================
 // 1. HELPER COMPONENTS & TYPES
 // ==========================================
-
-// FIX: Menambahkan 'export' agar bisa dibaca di Reports.tsx
 export interface MarketData {
     usdRate: number;
     goldPrice: number;
@@ -164,106 +161,143 @@ const App = () => {
   }, [newTxType, incomeCategories, expenseCategories]);
 
   // ==========================================
-  // REAL MARKET & NOTIFICATION ENGINE
+  // REAL MARKET & NOTIFICATION ENGINE (SUPABASE DB EDITION)
   // ==========================================
   useEffect(() => {
       if (!isDataLoaded) return;
 
-      const fetchRealMarketData = async (lastData: MarketData) => {
-          let newUsd = lastData.usdRate;
-          let newGold = lastData.goldPrice;
+      // 1. Fungsi Fetch API Real
+      const fetchApiData = async () => {
+          let newUsd = 15850;
+          let newGold = 1350000;
           
           try {
               const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=IDR');
               const data = await res.json();
-              if (data && data.rates && data.rates.IDR) {
-                  newUsd = data.rates.IDR;
-              }
-          } catch (e) { console.warn("USD API Failed, using fallback"); }
+              if (data?.rates?.IDR) newUsd = data.rates.IDR;
+          } catch (e) { console.warn("USD API Fail"); }
 
           try {
               const res = await fetch('https://data-asg.goldprice.org/dbXRates/IDR');
               const data = await res.json();
-              if (data && data.items && data.items[0] && data.items[0].xauPrice) {
-                  const pricePerOz = data.items[0].xauPrice;
-                  const pricePerGram = pricePerOz / 31.1035; 
-                  newGold = Math.floor(pricePerGram);
+              if (data?.items?.[0]?.xauPrice) {
+                  newGold = Math.floor(data.items[0].xauPrice / 31.1035);
               }
-          } catch (e) { 
-              const fluctuate = (val: number) => { const percent = (Math.random() * 2 - 1) / 100; return Math.floor(val * (1 + percent)); };
-              newGold = fluctuate(lastData.goldPrice);
-          }
+          } catch (e) { console.warn("Gold API Fail"); }
 
-          return { newUsd, newGold };
+          return { usd_price: newUsd, gold_price: newGold };
       };
 
-      const runMarketAndNotifications = async () => {
+      const syncMarketData = async () => {
           const today = new Date();
-          const todayStr = format(today, 'yyyy-MM-dd');
-          const lastCheck = localStorage.getItem('lastNotificationCheck');
           
-          const savedMarketJson = localStorage.getItem('financePro_marketData');
-          let currentMarket: MarketData = savedMarketJson 
-              ? JSON.parse(savedMarketJson) 
-              : { usdRate: 15850, goldPrice: 1350000, usdChange: 0, goldChange: 0, lastUpdated: '' };
+          // 2. Ambil data terakhir dari Supabase
+          const { data: dbData, error } = await supabase
+              .from('market_logs')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(2); // Ambil 2 data terakhir untuk perbandingan
 
-          if (currentMarket.lastUpdated !== todayStr) {
-              const { newUsd, newGold } = await fetchRealMarketData(currentMarket);
+          if (error) { console.error("DB Error:", error); return; }
 
-              const oldUsd = currentMarket.usdRate;
-              const oldGold = currentMarket.goldPrice;
+          let latestData = dbData?.[0];
+          let previousData = dbData?.[1];
+          let shouldInsertNew = false;
 
-              const usdChangePercent = ((newUsd - oldUsd) / oldUsd) * 100;
-              const goldChangePercent = ((newGold - oldGold) / oldGold) * 100;
-
-              currentMarket = {
-                  usdRate: newUsd,
-                  goldPrice: newGold,
-                  usdChange: usdChangePercent,
-                  goldChange: goldChangePercent,
-                  lastUpdated: todayStr
-              };
-
-              let newNotifs: AppNotification[] = [];
-              if (Math.abs(goldChangePercent) > 0.1) {
-                  newNotifs.push({
-                      id: `gold_${todayStr}`,
-                      title: goldChangePercent > 0 ? 'Harga Emas Naik 📈' : 'Harga Emas Turun 📉',
-                      message: `Emas Antam hari ini ${goldChangePercent > 0 ? 'naik' : 'turun'} ke Rp ${new Intl.NumberFormat('id-ID').format(newGold)}/gr.`,
-                      date: new Date().toISOString(),
-                      type: 'MARKET',
-                      read: false
-                  });
-              }
-              if (Math.abs(usdChangePercent) > 0.1) {
-                  newNotifs.push({
-                      id: `usd_${todayStr}`,
-                      title: usdChangePercent > 0 ? 'Rupiah Melemah 🇺🇸' : 'Rupiah Menguat 🇮🇩',
-                      message: `Kurs USD hari ini Rp ${new Intl.NumberFormat('id-ID').format(newUsd)}.`,
-                      date: new Date().toISOString(),
-                      type: 'MARKET',
-                      read: false
-                  });
-              }
-
-              if (newNotifs.length > 0) {
-                  setNotifications(prev => {
-                      const updated = [...newNotifs, ...prev];
-                      localStorage.setItem('appNotifications', JSON.stringify(updated));
-                      return updated;
-                  });
-              }
-
-              localStorage.setItem('financePro_marketData', JSON.stringify(currentMarket));
+          // 3. Logic Cek Waktu (12 Jam)
+          if (!latestData) {
+              shouldInsertNew = true; // DB Kosong
+          } else {
+              const lastUpdate = parseISO(latestData.created_at);
+              const hoursDiff = differenceInHours(today, lastUpdate);
+              if (hoursDiff >= 12) shouldInsertNew = true;
           }
-          
-          setMarketData(currentMarket);
 
-          if (lastCheck === todayStr && notifications.length === 0) {
+          // 4. Jika Perlu Update (Insert Baru)
+          if (shouldInsertNew) {
+              const newData = await fetchApiData();
+              
+              // Simpan ke DB
+              await supabase.from('market_logs').insert([{
+                  usd_price: newData.usd_price,
+                  gold_price: newData.gold_price,
+                  created_at: new Date().toISOString() 
+              }]);
+
+              // Update pointer untuk kalkulasi
+              previousData = latestData; // Data lama jadi previous
+              latestData = { ...newData, created_at: new Date().toISOString() } as any;
+
+              // CLEANUP: Hapus data > 3 hari
+              const threeDaysAgo = subDays(today, 3).toISOString();
+              await supabase.from('market_logs').delete().lt('created_at', threeDaysAgo);
+          }
+
+          // 5. Kalkulasi Perubahan & Update State MarketData
+          if (latestData) {
+              // Jika previousData null (baru 1 data), anggap perubahan 0
+              const prevUsd = previousData?.usd_price || latestData.usd_price;
+              const prevGold = previousData?.gold_price || latestData.gold_price;
+
+              const usdChange = prevUsd === 0 ? 0 : ((latestData.usd_price - prevUsd) / prevUsd) * 100;
+              const goldChange = prevGold === 0 ? 0 : ((latestData.gold_price - prevGold) / prevGold) * 100;
+
+              setMarketData({
+                  usdRate: latestData.usd_price,
+                  goldPrice: latestData.gold_price,
+                  usdChange,
+                  goldChange,
+                  lastUpdated: latestData.created_at
+              });
+
+              // 6. Buat Notifikasi jika ada kenaikan/penurunan (Hanya jika ada previousData)
+              if (previousData) {
+                  const todayStr = format(today, 'dd MMM yyyy');
+                  const notifKey = `market_notif_${latestData.id}`; // Unik per ID data
+                  
+                  // Load notif lokal untuk cek duplikat
+                  const storedNotifs = JSON.parse(localStorage.getItem('appNotifications') || '[]');
+                  let newNotifs: AppNotification[] = [];
+
+                  if (Math.abs(goldChange) > 0.01 && !storedNotifs.some((n:any) => n.id === `gold_${notifKey}`)) {
+                      newNotifs.push({
+                          id: `gold_${notifKey}`,
+                          title: goldChange > 0 ? 'Harga Emas Naik 📈' : 'Harga Emas Turun 📉',
+                          message: `Emas sekarang Rp ${new Intl.NumberFormat('id-ID').format(latestData.gold_price)}/gr (${goldChange > 0 ? '+' : ''}${goldChange.toFixed(2)}% dari sebelumnya).`,
+                          date: new Date().toISOString(),
+                          type: 'MARKET',
+                          read: false
+                      });
+                  }
+
+                  if (Math.abs(usdChange) > 0.01 && !storedNotifs.some((n:any) => n.id === `usd_${notifKey}`)) {
+                      newNotifs.push({
+                          id: `usd_${notifKey}`,
+                          title: usdChange > 0 ? 'Rupiah Melemah 🇺🇸' : 'Rupiah Menguat 🇮🇩',
+                          message: `USD sekarang Rp ${new Intl.NumberFormat('id-ID').format(latestData.usd_price)} (${usdChange > 0 ? '+' : ''}${usdChange.toFixed(2)}%).`,
+                          date: new Date().toISOString(),
+                          type: 'MARKET',
+                          read: false
+                      });
+                  }
+
+                  if (newNotifs.length > 0) {
+                      setNotifications(prev => {
+                          const updated = [...newNotifs, ...prev];
+                          localStorage.setItem('appNotifications', JSON.stringify(updated));
+                          return updated;
+                      });
+                  }
+              }
+          }
+
+          // Restore Notifikasi Lama
+          if (notifications.length === 0) {
               const savedNotifs = JSON.parse(localStorage.getItem('appNotifications') || '[]');
               if (savedNotifs.length > 0) setNotifications(savedNotifs);
           }
 
+          // 7. CEK NOTIFIKASI LAIN (ZAKAT / HAJI / BULANAN) - Tetap Jalan
           const existingNotifs = JSON.parse(localStorage.getItem('appNotifications') || '[]');
           let additionalNotifs: AppNotification[] = [];
 
@@ -288,7 +322,8 @@ const App = () => {
               });
           }
 
-          const nishab = 85 * currentMarket.goldPrice; 
+          const currentGoldPrice = latestData?.gold_price || 1350000;
+          const nishab = 85 * currentGoldPrice;
           const totalAssets = accounts.reduce((sum, a) => sum + a.balance, 0);
           const zakatId = `zakat_${format(today, 'MM_yyyy')}`;
           if (totalAssets >= nishab && !existingNotifs.some((n:any) => n.id === zakatId)) {
@@ -301,18 +336,16 @@ const App = () => {
                   localStorage.setItem('appNotifications', JSON.stringify(updated));
                   return updated;
               });
-          } else if (notifications.length === 0) {
-              setNotifications(existingNotifs);
           }
       };
 
-      runMarketAndNotifications();
+      syncMarketData();
   }, [isDataLoaded, transactions, accounts, nonProfitAccounts]);
 
   const handleMarkAsRead = (id: string) => { const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n); setNotifications(updated); localStorage.setItem('appNotifications', JSON.stringify(updated)); };
   const handleClearNotifications = () => { setNotifications([]); localStorage.removeItem('appNotifications'); };
 
-  // ... (LOADERS & AUTH EFFECTS) ...
+  // ... (LOADERS & AUTH EFFECTS SAMA) ...
   const loadSettingsFromSupabase = async (userId: string) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
     if (data) {
@@ -365,14 +398,8 @@ const App = () => {
   // --- BATCH DELETE FOR CLEAR HISTORY ---
   const handleDeleteBatch = async (ids: string[]) => {
       if(!confirm(`Delete ${ids.length} transactions? This cannot be undone.`)) return;
-      
-      if (user && user.id) {
-          await supabase.from('transactions').delete().in('id', ids).eq('user_id', user.id);
-      }
-
+      if (user && user.id) { await supabase.from('transactions').delete().in('id', ids).eq('user_id', user.id); }
       setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
-      
-      // Update Account Balances
       const txsToDelete = transactions.filter(t => ids.includes(t.id));
       setAccounts(prev => {
           // FIX: Explicit Type for Map to avoid 'unknown' error
@@ -418,7 +445,6 @@ const App = () => {
   const t = (key: string) => { const dict: any = { 'settings': lang === 'en' ? 'Settings' : 'Pengaturan', 'language': lang === 'en' ? 'Language' : 'Bahasa', 'accentColor': lang === 'en' ? 'Accent Color' : 'Warna Aksen', 'custom': lang === 'en' ? 'Custom' : 'Kustom', 'bgTheme': lang === 'en' ? 'Background Theme' : 'Tema Latar', 'dataMgmt': lang === 'en' ? 'Data Management' : 'Manajemen Data', 'resetData': lang === 'en' ? 'Reset Data' : 'Reset Data', 'confirmReset': lang === 'en' ? 'Are you sure?' : 'Anda yakin?', }; return dict[key] || key; };
 
   // --- RENDERERS ---
-  // INI BAGIAN YANG HILANG DI BACKUP ANDA (SEKARANG SUDAH ADA LAGI)
   const renderAccountsTab = () => {
       const husbandAccounts = accounts.filter(a => a.owner === 'Husband');
       const wifeAccounts = accounts.filter(a => a.owner === 'Wife');
