@@ -515,30 +515,24 @@ const App = () => {
     }
   };
 
-  const loadDataFromSupabase = async (userId: string, isSilent = false) => {
-    if (!isSilent) setIsLoading(true);
-    try {
-      const [accRes, txRes] = await Promise.all([
-        supabase.from("accounts").select("*").eq("user_id", userId),
-        supabase.from("transactions").select("*").eq("user_id", userId),
-        loadSettingsFromSupabase(userId),
-      ]);
-      if (accRes.data) setAccounts(accRes.data);
-      if (txRes.data)
-        setTransactions(
-          txRes.data.map((t) => ({
-            ...t,
-            accountId: t.account_id,
-            toAccountId: t.to_account_id,
-            notes: t.note,
-          })),
-        );
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsDataLoaded(true);
-      if (!isSilent) setIsLoading(false);
-    }
+  // UPDATE 1: Load Data Haji/Umrah dari Database
+  const loadDataFromSupabase = async (userId: string, isSilent = false) => { 
+      if (!isSilent) setIsLoading(true); 
+      try { 
+          const [accRes, txRes, npAccRes, npTxRes, settingsRes] = await Promise.all([ 
+              supabase.from('accounts').select('*').eq('user_id', userId), 
+              supabase.from('transactions').select('*').eq('user_id', userId),
+              supabase.from('non_profit_accounts').select('*').eq('user_id', userId), // Load Akun Haji
+              supabase.from('non_profit_transactions').select('*').eq('user_id', userId), // Load History Haji
+              loadSettingsFromSupabase(userId) 
+          ]); 
+          
+          if (accRes.data) setAccounts(accRes.data); 
+          if (txRes.data) setTransactions(txRes.data.map(t => ({ ...t, accountId: t.account_id, toAccountId: t.to_account_id, notes: t.note }))); 
+          if (npAccRes.data) setNonProfitAccounts(npAccRes.data);
+          if (npTxRes.data) setNonProfitTransactions(npTxRes.data.map(t => ({ ...t, accountId: t.account_id, notes: t.notes })));
+      } catch (err) { console.error(err); } 
+      finally { setIsDataLoaded(true); if (!isSilent) setIsLoading(false); } 
   };
 
   useEffect(() => {
@@ -821,9 +815,14 @@ const App = () => {
       t((p) => p.filter((c) => c !== cat));
     }
   };
-  const handleClearHajjHistory = () => {
-    if (confirm("Clear history?")) setNonProfitTransactions([]);
+  // UPDATE 2: Hapus History Haji di Database
+  const handleClearHajjHistory = async () => { 
+      if(confirm('Clear history?')) {
+          setNonProfitTransactions([]); 
+          if(user?.id) await supabase.from('non_profit_transactions').delete().eq('user_id', user.id);
+      }
   };
+
   const handleMarkAsRead = (id: string) => {
     const u = notifications.map((n) =>
       n.id === id ? { ...n, read: true } : n,
@@ -973,17 +972,22 @@ const App = () => {
     }
   };
 
-  const onAddPress = () => {
-    setNewTxDate(format(new Date(), "yyyy-MM-dd"));
-    if (selectedAccountForDetail) {
-      setNewTxAccountId(selectedAccountForDetail.id);
-      setNewTxOwnerFilter(selectedAccountForDetail.owner || "All");
-    } else {
-      setNewTxAccountId("");
-      setNewTxOwnerFilter("All");
-    }
-    setShowTransactionModal(true);
+  const onAddPress = () => { 
+      setNewTxDate(format(new Date(), 'yyyy-MM-dd')); 
+      if (selectedAccountForDetail) { 
+          setNewTxAccountId(selectedAccountForDetail.id); 
+          // Auto-select Filter berdasarkan Owner Akun
+          setNewTxOwnerFilter(selectedAccountForDetail.owner || 'All');
+          // Default tujuan transfer disamakan dulu (bisa diubah user nanti)
+          setNewTxToOwnerFilter(selectedAccountForDetail.owner || 'All');
+      } else { 
+          setNewTxAccountId(''); 
+          setNewTxOwnerFilter('All'); 
+          setNewTxToOwnerFilter('All'); // Default Reset
+      } 
+      setShowTransactionModal(true); 
   };
+
   const handleSubmitTransaction = async () => {
     const val = parseFloat(newTxAmount);
     if (!val || !newTxAccountId) return;
@@ -1054,32 +1058,22 @@ const App = () => {
     setAccounts((prev) => [...prev, acc]);
     setShowAddAccountModal(false);
   };
-  const handleAddNonProfitAccount = (
-    name: string,
-    owner: AccountOwner,
-    target: number,
-    initialBalance: number,
-  ) => {
-    const newAcc: NonProfitAccount = {
-      id: `np_${Date.now()}`,
-      name,
-      owner,
-      balance: initialBalance,
-      target,
-    };
-    setNonProfitAccounts((prev) => [...prev, newAcc]);
-    if (initialBalance > 0)
-      setNonProfitTransactions((prev) => [
-        ...prev,
-        {
-          id: `init_${Date.now()}`,
-          date: new Date().toISOString(),
-          amount: initialBalance,
-          accountId: newAcc.id,
-          notes: "Saldo Awal",
-        },
-      ]);
+  // UPDATE 3: Simpan Akun Haji Baru ke Database
+  const handleAddNonProfitAccount = async (name: string, owner: AccountOwner, target: number, initialBalance: number) => { 
+      const newAcc: NonProfitAccount = { id: `np_${Date.now()}`, name, owner, balance: initialBalance, target }; 
+      
+      if(user?.id) {
+          await supabase.from('non_profit_accounts').insert([{ id: newAcc.id, user_id: user.id, name, owner, balance: initialBalance, target }]);
+          
+          if (initialBalance > 0) {
+              const tx = { id: `init_${Date.now()}`, date: new Date().toISOString(), amount: initialBalance, account_id: newAcc.id, notes: 'Saldo Awal' };
+              await supabase.from('non_profit_transactions').insert([{ ...tx, user_id: user.id }]);
+              setNonProfitTransactions(prev => [...prev, { ...tx, accountId: newAcc.id }]);
+          }
+      }
+      setNonProfitAccounts(prev => [...prev, newAcc]); 
   };
+
   const handleDeleteNonProfitAccount = (id: string) => {
     if (confirm("Delete?")) {
       setNonProfitAccounts((prev) => prev.filter((a) => a.id !== id));
@@ -1282,66 +1276,66 @@ const App = () => {
         );
       case "accounts":
         return renderAccountsTab();
-      case "non-profit":
-        return (
-          <NonProfit
-            accounts={nonProfitAccounts}
-            transactions={nonProfitTransactions}
-            mainAccounts={accounts}
-            onClearHistory={handleClearHajjHistory}
-            lang={lang}
-            currency={currency}
-            onAddAccount={handleAddNonProfitAccount}
-            onDeleteAccount={handleDeleteNonProfitAccount}
-            onAddTransaction={(tx, src) => {
-              setNonProfitTransactions((p) => [...p, tx]);
-              if (src) {
-                const t: Transaction = {
-                  id: "tr-" + tx.id,
-                  date: tx.date,
-                  type: "EXPENSE",
-                  amount: tx.amount,
-                  accountId: src,
-                  category: "Non-Profit Transfer",
-                  notes: "Transfer to " + tx.accountId,
-                };
-                setTransactions((p) => [t, ...p]);
-                setAccounts((p) =>
-                  p.map((a) =>
-                    a.id === src ? { ...a, balance: a.balance - tx.amount } : a,
-                  ),
-                );
-              }
-            }}
-            onUpdateBalance={(id, bal) =>
-              setNonProfitAccounts((p) =>
-                p.map((a) => (a.id === id ? { ...a, balance: bal } : a)),
-              )
-            }
-            onComplete={(id) =>
-              setNonProfitAccounts((p) =>
-                p.map((a) => (a.id === id ? { ...a, balance: 0 } : a)),
-              )
-            }
-          />
-        );
-      case "zakat":
-        return (
-          <ZakatMal
-            accounts={accounts}
-            transactions={transactions}
-            onAddTransaction={(tx) => {
-              setTransactions((p) => [tx, ...p]);
-              setAccounts((p) =>
-                p.map((a) =>
-                  a.id === tx.accountId
-                    ? { ...a, balance: a.balance - tx.amount }
-                    : a,
-                ),
-              );
-            }}
-          />
-        );
+      // UPDATE 5: Render Halaman Haji dengan Logika Transaksi Database
+          case 'non-profit': return <NonProfit 
+              accounts={nonProfitAccounts} 
+              transactions={nonProfitTransactions} 
+              mainAccounts={accounts} 
+              onClearHistory={handleClearHajjHistory} 
+              lang={lang} 
+              currency={currency} 
+              onAddAccount={handleAddNonProfitAccount} 
+              onDeleteAccount={handleDeleteNonProfitAccount} 
+              onAddTransaction={async (tx, src)=>{ 
+                  // A. Catat Transaksi Haji (Local & DB)
+                  setNonProfitTransactions(p=>[...p, tx]); 
+                  if(user?.id) await supabase.from('non_profit_transactions').insert([{ id: tx.id, user_id: user.id, account_id: tx.accountId, amount: tx.amount, date: tx.date, notes: tx.notes }]);
+
+                  // B. Update Saldo Akun Haji (Local & DB)
+                  const currentBal = nonProfitAccounts.find(a => a.id === tx.accountId)?.balance || 0;
+                  const newBalance = currentBal + tx.amount;
+                  setNonProfitAccounts(p => p.map(a => a.id === tx.accountId ? { ...a, balance: newBalance } : a));
+                  if(user?.id) await supabase.from('non_profit_accounts').update({ balance: newBalance }).eq('id', tx.accountId);
+
+                  // C. Jika Transfer dari Akun Utama (Kurangi Saldo Bank)
+                  if(src) { 
+                      const t: Transaction = { id:'tr-'+tx.id, date:tx.date, type:'EXPENSE', amount:tx.amount, accountId:src, category:'Non-Profit Transfer', notes:'Transfer to '+tx.accountId }; 
+                      if(user?.id) await supabase.from('transactions').insert([{ user_id: user.id, amount: t.amount, type: t.type, category: t.category, note: t.notes, date: t.date, account_id: t.accountId }]);
+                      setTransactions(p=>[t,...p]); 
+                      
+                      const mainAcc = accounts.find(a => a.id === src);
+                      if (mainAcc) {
+                          const newMainBal = mainAcc.balance - t.amount;
+                          setAccounts(p=>p.map(a=>a.id===src?{...a, balance:newMainBal}:a));
+                          if(user?.id) await supabase.from('accounts').update({ balance: newMainBal }).eq('id', src);
+                      }
+                  } 
+              }} 
+              onUpdateBalance={async (id, bal) => {
+                  setNonProfitAccounts(p=>p.map(a=>a.id===id?{...a, balance:bal}:a));
+                  if(user?.id) await supabase.from('non_profit_accounts').update({ balance: bal }).eq('id', id);
+              }} 
+              onComplete={async (id) => {
+                  setNonProfitAccounts(p=>p.map(a=>a.id===id?{...a, balance:0}:a));
+                  if(user?.id) await supabase.from('non_profit_accounts').update({ balance: 0 }).eq('id', id);
+              }} 
+          />;
+
+      case 'zakat': return <ZakatMal 
+              accounts={accounts} 
+              transactions={transactions} 
+              lang={lang} // UPDATE: Tambahkan ini agar bahasa berubah
+              onAddTransaction={(tx)=>{ 
+                  setTransactions(p=>[tx,...p]); 
+                  // ... logic update saldo ...
+                  const acc = accounts.find(a => a.id === tx.accountId);
+                  if(acc) {
+                      const newBal = acc.balance - tx.amount;
+                      setAccounts(p=>p.map(a=>a.id===tx.accountId?{...a, balance:newBal}:a));
+                      if(user?.id) supabase.from('accounts').update({ balance: newBal }).eq('id', tx.accountId);
+                  }
+              }} 
+          />;
 
       case "more":
         return (
@@ -1780,10 +1774,11 @@ const App = () => {
       )}
 
       {/* NEW TRANSACTION MODAL */}
-        {showTransactionModal && (<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+        {showTransactionModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md bg-surface rounded-2xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh] shadow-2xl animate-in zoom-in-95">
             
-            {/* 1. Transaction Type Switcher */}
+            {/* 1. TABS TIPE TRANSAKSI */}
             <div className="flex bg-[#18181b] p-1 border-b border-white/10">
                 <button onClick={() => setNewTxType('EXPENSE')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${newTxType === 'EXPENSE' ? 'bg-rose-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Expense</button>
                 <button onClick={() => setNewTxType('INCOME')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${newTxType === 'INCOME' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Income</button>
@@ -1792,22 +1787,21 @@ const App = () => {
 
             <div className="p-6 space-y-5 overflow-y-auto">
                 
-                {/* 2. SOURCE OWNER FILTER (Untuk Expense/Income/Transfer From) */}
+                {/* 2. FILTER OWNER SUMBER (FROM) */}
                 <div>
                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{newTxType === 'TRANSFER' ? 'From Owner' : 'Wallet Owner'}</label>
-                    <div className="flex bg-black/30 p-1 rounded-lg mb-3">
+                    <div className="flex bg-black/30 p-1 rounded-lg mb-2">
                         <button type="button" onClick={() => setNewTxOwnerFilter('Husband')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newTxOwnerFilter === 'Husband' ? 'bg-indigo-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>Husband</button>
                         <button type="button" onClick={() => setNewTxOwnerFilter('Wife')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newTxOwnerFilter === 'Wife' ? 'bg-pink-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>Wife</button>
                     </div>
                 </div>
 
-                {/* 3. FORM INPUTS */}
                 {newTxType === 'TRANSFER' ? (
-                   // --- TRANSFER INTERFACE ---
-                   <div className="space-y-4">
+                   // --- TAMPILAN TRANSFER ---
+                   <div className="space-y-5">
                        {/* FROM ACCOUNT */}
                        <div>
-                           <label className="text-xs font-bold text-gray-400 uppercase mb-1 block">From Account</label>
+                           <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">From Account</label>
                            <div className="relative">
                                <select value={newTxAccountId} onChange={e=>setNewTxAccountId(e.target.value)} className="w-full bg-[#18181b] p-4 pr-10 rounded-xl border border-white/10 text-white outline-none focus:border-blue-500 appearance-none cursor-pointer">
                                    <option value="" disabled>Select Source</option>
@@ -1817,9 +1811,9 @@ const App = () => {
                            </div>
                        </div>
                        
-                       {/* TO OWNER FILTER (NEW BUTTONS) */}
-                       <div>
-                            <label className="text-xs font-bold text-gray-400 uppercase mb-2 block">To Owner</label>
+                       {/* FILTER OWNER TUJUAN (TO) */}
+                       <div className="pt-2 border-t border-white/5">
+                            <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">To Owner</label>
                             <div className="flex bg-black/30 p-1 rounded-lg mb-2">
                                 <button type="button" onClick={() => setNewTxToOwnerFilter('Husband')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newTxToOwnerFilter === 'Husband' ? 'bg-indigo-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>Husband</button>
                                 <button type="button" onClick={() => setNewTxToOwnerFilter('Wife')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${newTxToOwnerFilter === 'Wife' ? 'bg-pink-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>Wife</button>
@@ -1828,11 +1822,10 @@ const App = () => {
 
                        {/* TO ACCOUNT */}
                        <div>
-                           <label className="text-xs font-bold text-gray-400 uppercase mb-1 block">To Account</label>
+                           <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">To Account</label>
                            <div className="relative">
                                <select value={newTxToAccountId} onChange={e=>setNewTxToAccountId(e.target.value)} className="w-full bg-[#18181b] p-4 pr-10 rounded-xl border border-white/10 text-white outline-none focus:border-blue-500 appearance-none cursor-pointer">
                                    <option value="" disabled>Select Destination</option>
-                                   {/* Filter: Must match ToOwnerFilter AND not be same as Source Account */}
                                    {accounts
                                         .filter(a => a.owner === newTxToOwnerFilter)
                                         .filter(a => a.id !== newTxAccountId)
@@ -1844,7 +1837,7 @@ const App = () => {
                        </div>
                    </div>
                 ) : (
-                    // --- EXPENSE / INCOME INTERFACE ---
+                    // --- TAMPILAN EXPENSE / INCOME ---
                     <div>
                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account</label>
                         <div className="relative">
@@ -1857,13 +1850,13 @@ const App = () => {
                     </div>
                 )}
 
-                {/* Amount Input */}
+                {/* AMOUNT INPUT */}
                 <div>
                     <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount</label>
                     <CurrencyInput value={newTxAmount} onChange={setNewTxAmount} currency={currency} className="bg-[#18181b] border border-white/10 rounded-xl p-4 text-3xl font-bold text-white text-right outline-none focus:border-white/30" placeholder="0" autoFocus />
                 </div>
 
-                {/* Category with Gear Manager */}
+                {/* CATEGORY (EXPENSE/INCOME ONLY) */}
                 {newTxType !== 'TRANSFER' && (
                     <div>
                         <div className="flex justify-between items-center mb-2">
@@ -1894,18 +1887,21 @@ const App = () => {
                     </div>
                 )}
                 
-                {/* Notes Input */}
+                {/* NOTES */}
                 <div>
                      <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Note (Optional)</label>
                      <input type="text" value={newTxNotes} onChange={e=>setNewTxNotes(e.target.value)} className="w-full bg-[#18181b] border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary" placeholder="Description..." />
                 </div>
 
+                {/* ACTION BUTTONS */}
                 <div className="flex gap-3 pt-4">
                     <button onClick={()=>setShowTransactionModal(false)} className="flex-1 py-4 rounded-xl font-bold text-gray-400 hover:bg-white/5 transition-colors">Cancel</button>
                     <button onClick={handleSubmitTransaction} className="flex-[2] py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-colors shadow-lg">Save Transaction</button>
                 </div>
             </div>
-        </div></div>)}
+        </div>
+        </div>
+        )}
 
       {showAuthModal && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4">

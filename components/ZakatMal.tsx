@@ -1,78 +1,85 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
-import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock } from 'lucide-react';
-import { subDays, parseISO, format } from 'date-fns';
+import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock, BadgeCheck } from 'lucide-react';
+import { subDays, parseISO, format, isAfter } from 'date-fns';
 
 interface ZakatMalProps {
     accounts: Account[];
     transactions: Transaction[];
     onAddTransaction: (tx: Transaction) => void;
+    lang?: 'en' | 'id';
 }
 
-const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction }) => {
-    const [goldPrice, setGoldPrice] = useState<number>(1400000); // Default estimasi
+const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, lang = 'en' }) => {
+    const [goldPrice, setGoldPrice] = useState<number>(1400000);
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
-    
-    // Payment Modal State
     const [showPayModal, setShowPayModal] = useState(false);
     const [paymentSourceAccountId, setPaymentSourceAccountId] = useState('');
+
+    // --- DICTIONARY ---
+    const t = (key: string) => {
+        const dict: any = {
+            title: lang === 'en' ? 'Zakat Mal Calculator' : 'Kalkulator Zakat Mal',
+            goldPrice: lang === 'en' ? 'Current Gold Price / Gram' : 'Harga Emas / Gram',
+            liveUpdate: lang === 'en' ? 'Live Update' : 'Update Langsung',
+            startDate: lang === 'en' ? 'Start Date (Haul)' : 'Mulai Haul',
+            statusObligated: lang === 'en' ? 'Zakat Obligated' : 'Wajib Zakat',
+            statusPaid: lang === 'en' ? 'Zakat Paid (Alhamdulillah)' : 'Zakat Lunas (Alhamdulillah)',
+            statusNotObligated: lang === 'en' ? 'Not Obligated' : 'Belum Wajib Zakat',
+            totalAssets: lang === 'en' ? 'Total Assets (Haul Met)' : 'Total Harta (Haul Terpenuhi)',
+            zakatAmount: lang === 'en' ? 'Zakat Amount (2.5%)' : 'Jumlah Zakat (2.5%)',
+            calcBasis: lang === 'en' ? 'Calculation Basis (Lowest)' : 'Basis Perhitungan (Terendah)',
+            lowestDate: lang === 'en' ? 'Lowest Balance Date' : 'Tanggal Saldo Terendah',
+            payNow: lang === 'en' ? 'Pay Zakat Now' : 'Bayar Zakat Sekarang',
+            reasonBelow: lang === 'en' ? 'Total assets currently below nisab.' : 'Total harta saat ini di bawah nisab.',
+            reasonPaid: lang === 'en' ? 'You have paid Zakat for this period.' : 'Anda sudah membayar Zakat untuk periode ini.',
+            advice: lang === 'en' ? 'You Can Still Donate!' : 'Tetap Bisa Sedekah!',
+            adviceDesc: lang === 'en' ? 'Charity is always open even if Zakat is not obligated.' : 'Sedekah tetap dianjurkan meski belum wajib zakat.',
+            modalTitle: lang === 'en' ? 'Pay Zakat Mal' : 'Bayar Zakat Mal',
+            owner: lang === 'en' ? 'Zakat Owner' : 'Pemilik Zakat',
+            source: lang === 'en' ? 'Source Account' : 'Sumber Dana',
+            amountPay: lang === 'en' ? 'Amount to Pay' : 'Jumlah Bayar',
+            confirm: lang === 'en' ? 'Confirm Payment' : 'Konfirmasi Bayar',
+            husband: lang === 'en' ? 'Husband' : 'Suami',
+            wife: lang === 'en' ? 'Wife' : 'Istri',
+            sourceNote: lang === 'en' ? '* Only showing accounts of' : '* Hanya menampilkan akun',
+        };
+        return dict[key] || key;
+    };
 
     const formatCurrency = (val: number) => 
         new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
-    // --- 1. FETCH LIVE GOLD PRICE (TRICK: Using Public JSON via Proxy) ---
     const fetchLiveGoldPrice = async () => {
         setIsFetchingPrice(true);
         try {
-            // URL ini adalah endpoint publik yang digunakan widget website goldprice.org
             const response = await fetch('https://api.allorigins.win/raw?url=https://data-asg.goldprice.org/dbXRates/IDR');
             const data = await response.json();
-            
-            // Data format: { items: [ { xauPrice: 35000000, ... } ] }
-            // xauPrice adalah harga per Ounce (oz). 1 Troy Ounce = 31.1035 Gram.
             if (data.items && data.items.length > 0) {
-                const pricePerOz = data.items[0].xauPrice;
-                const pricePerGram = pricePerOz / 31.1035;
-                setGoldPrice(Math.round(pricePerGram));
+                setGoldPrice(Math.round(data.items[0].xauPrice / 31.1035));
             }
-        } catch (error) {
-            console.error("Gagal update harga emas:", error);
-            // Silent fail, pakai harga default/terakhir
-        } finally {
-            setIsFetchingPrice(false);
-        }
+        } catch (error) { console.error(error); } finally { setIsFetchingPrice(false); }
     };
 
-    // Auto-fetch saat pertama kali buka
-    useEffect(() => {
-        fetchLiveGoldPrice();
-    }, []);
+    useEffect(() => { fetchLiveGoldPrice(); }, []);
 
-    // --- 2. Hijri Date Helper ---
-    const getHijriDateParts = (date: Date) => {
-        try {
-            const parts = new Intl.DateTimeFormat('en-u-ca-islamic-nu-latn', {
-                day: 'numeric', month: 'numeric', year: 'numeric'
-            }).formatToParts(date);
-            const d = parseInt(parts.find(p => p.type === 'day')?.value || '1');
-            const m = parseInt(parts.find(p => p.type === 'month')?.value || '1');
-            const y = parseInt(parts.find(p => p.type === 'year')?.value || '1445');
-            return { d, m, y, valid: true };
-        } catch (e) { return { d: 1, m: 1, y: 1445, valid: false }; }
-    };
-
-    // --- 3. Calculation Logic ---
+    // --- CALCULATION ENGINE ---
     const calculationResult = useMemo(() => {
         const NISAB_GRAMS = 85;
         const nisabValue = goldPrice * NISAB_GRAMS;
-        
-        let haulStartDate = subDays(new Date(), 354);
-        let haulStartHijriString = "Approx. 1 Lunar Year Ago";
-        try {
-            const todayParts = getHijriDateParts(new Date());
-            if(todayParts.valid) haulStartHijriString = `Ramadan ${todayParts.y - 1}`;
-        } catch(e) {}
+        const haulStartDate = subDays(new Date(), 354); // 1 Tahun Hijriah yang lalu
+
+        // 1. Cek apakah sudah bayar Zakat Mal di periode haul ini (setelah start date)
+        const alreadyPaidTx = transactions.find(tx => 
+            tx.category === 'Zakat Mal' && 
+            isAfter(parseISO(tx.date), haulStartDate) &&
+            tx.notes?.includes(selectedOwner) // Cek pemilik
+        );
+
+        if (alreadyPaidTx) {
+            return { status: 'PAID', zakatAmount: alreadyPaidTx.amount, haulStartDate, paidDate: alreadyPaidTx.date };
+        }
 
         const ownerAccounts = accounts.filter(a => a.owner === selectedOwner);
         const currentTotalAssets = ownerAccounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -80,294 +87,107 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
         if (currentTotalAssets < nisabValue) {
             return {
                 status: 'NOT_OBLIGATED',
-                reason: 'Current assets below Nisab.',
                 currentTotal: currentTotalAssets,
-                nisabValue,
                 zakatAmount: 0,
-                minBalanceInYear: currentTotalAssets,
-                minBalanceDate: new Date(),
-                haulStartDate, haulStartHijriString
+                haulStartDate
             };
         }
 
-        // Logic Haul Sederhana (Simulation)
-        let minBalanceInHaul = currentTotalAssets; 
-        
+        // Simplifikasi: Anggap saldo terendah adalah saldo saat ini (konservatif)
         return {
             status: 'OBLIGATED',
-            reason: 'Assets above Nisab.',
             currentTotal: currentTotalAssets,
-            nisabValue,
             zakatAmount: currentTotalAssets * 0.025,
-            minBalanceInYear: minBalanceInHaul,
+            minBalanceInYear: currentTotalAssets, // Simulasi
             minBalanceDate: subDays(new Date(), 100), 
-            haulStartDate, haulStartHijriString
+            haulStartDate
         };
     }, [goldPrice, selectedOwner, accounts, transactions]);
 
     const handlePayZakat = () => {
         if (!paymentSourceAccountId) return;
-        
         const tx: Transaction = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: `zak-${Date.now()}`,
             date: new Date().toISOString(),
             type: 'EXPENSE',
-            amount: calculationResult.zakatAmount,
+            amount: calculationResult.zakatAmount || 0,
             accountId: paymentSourceAccountId,
-            category: 'Zakat & Charity',
-            notes: `Zakat Mal (${selectedOwner})`
+            category: 'Zakat Mal', // FIX: Kategori Khusus
+            notes: `Zakat Mal (${selectedOwner}) - Haul ${new Date().getFullYear()}`
         };
         onAddTransaction(tx);
         setShowPayModal(false);
     };
 
-    const currentHijriDisplay = useMemo(() => {
-        try {
-            return new Intl.DateTimeFormat('id-ID-u-ca-islamic', {
-                day: 'numeric', month: 'long', year: 'numeric'
-            }).format(new Date());
-        } catch { return "Hijri Date"; }
-    }, []);
-
     return (
         <div className="flex flex-col h-full bg-background pb-40 overflow-y-auto">
-            {/* --- HEADER DYNAMIC --- */}
             <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
-                 <div 
-                    className="absolute inset-0 opacity-20 mix-blend-hard-light transition-colors duration-500"
-                    style={{ background: `linear-gradient(to bottom right, var(--color-primary), transparent)` }}
-                 ></div>
-                 <div className="absolute top-0 left-0 p-4 opacity-5">
-                     <Coins className="w-32 h-32 text-white -rotate-12" />
-                 </div>
-                 <div className="relative z-10">
-                    <h1 className="text-2xl font-bold text-white mb-2">Zakat Mal Calculator</h1>
-                    <div className="inline-block px-4 py-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-md">
-                        <p className="text-white/80 text-sm font-medium">{currentHijriDisplay}</p>
-                    </div>
-                 </div>
+                 <div className="absolute inset-0 opacity-20 mix-blend-hard-light transition-colors duration-500" style={{ background: `linear-gradient(to bottom right, var(--color-primary), transparent)` }}></div>
+                 <div className="absolute top-0 left-0 p-4 opacity-5"><Coins className="w-32 h-32 text-white -rotate-12" /></div>
+                 <div className="relative z-10"><h1 className="text-2xl font-bold text-white mb-2">{t('title')}</h1></div>
             </div>
 
             <div className="p-4 space-y-6 -mt-24 relative z-20">
-                
-                {/* Input Section */}
                 <div className="bg-surface p-5 rounded-2xl border border-white/10 shadow-lg space-y-4">
                     <div className="flex bg-black/30 p-1 rounded-xl">
                         {(['Husband', 'Wife'] as const).map(role => (
-                            <button
-                                key={role}
-                                onClick={() => setSelectedOwner(role)}
-                                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                                    selectedOwner === role 
-                                    ? 'bg-white/10 text-white shadow border border-white/20' 
-                                    : 'text-gray-400 hover:text-white'
-                                }`}
-                                style={selectedOwner === role ? { color: 'var(--color-primary)', borderColor: 'var(--color-primary)' } : {}}
-                            >
-                                <UserCircle2 className="w-4 h-4" />
-                                {role === 'Husband' ? 'Suami' : 'Istri'}
-                            </button>
+                            <button key={role} onClick={() => setSelectedOwner(role)} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${selectedOwner === role ? 'bg-white/10 text-white shadow border border-white/20' : 'text-gray-400 hover:text-white'}`} style={selectedOwner === role ? { color: 'var(--color-primary)', borderColor: 'var(--color-primary)' } : {}}><UserCircle2 className="w-4 h-4" />{role === 'Husband' ? t('husband') : t('wife')}</button>
                         ))}
                     </div>
-                    
-                    {/* INPUT HARGA EMAS (READ ONLY) */}
                     <div>
-                        <div className="flex justify-between items-center mb-2">
-                            <label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">Current Gold Price / Gram (IDR)</label>
-                            {/* Tombol Refresh Live */}
-                            <button 
-                                onClick={fetchLiveGoldPrice}
-                                disabled={isFetchingPrice}
-                                className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 transition-all disabled:opacity-50"
-                            >
-                                {isFetchingPrice ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}
-                                {isFetchingPrice ? 'Updating...' : 'Live Update'}
-                            </button>
-                        </div>
-                        
-                        <div className="relative group">
-                            <input 
-                                type="text" // Ubah ke text agar bisa menampilkan format Rp
-                                value={formatCurrency(goldPrice)} // Tampilkan nilai yang sudah diformat
-                                readOnly // MATIKAN EDIT MANUAL
-                                className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-gray-400 outline-none cursor-not-allowed opacity-80" // Style Read-Only
-                            />
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/5 p-1.5 rounded-lg">
-                                {/* Ganti Icon jadi Lock atau tetap Coins tapi redup */}
-                                <Lock className="w-4 h-4 text-gray-500" />
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-gray-500 mt-2 flex justify-between">
-                            <span>* Nisab (85g) = {formatCurrency(goldPrice * 85)}</span>
-                            <span className="text-white/20">Source: GoldPrice (Spot)</span>
-                        </p>
+                        <div className="flex justify-between items-center mb-2"><label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">{t('goldPrice')}</label><button onClick={fetchLiveGoldPrice} disabled={isFetchingPrice} className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 transition-all disabled:opacity-50">{isFetchingPrice ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}{t('liveUpdate')}</button></div>
+                        <div className="relative group"><input type="text" value={formatCurrency(goldPrice)} readOnly className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-gray-400 outline-none cursor-not-allowed opacity-80" /><div className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/5 p-1.5 rounded-lg"><Lock className="w-4 h-4 text-gray-500" /></div></div>
                     </div>
                 </div>
 
-                <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex justify-between items-center text-xs text-gray-300">
-                    <span className="flex items-center gap-2"><CalendarClock className="w-4 h-4" /> Start Date (Haul):</span>
-                    <span className="font-bold text-white text-right">
-                        {calculationResult.haulStartHijriString} <br/> 
-                        <span className="text-[10px] text-gray-500 font-normal">({format(calculationResult.haulStartDate, 'd MMM yyyy')})</span>
-                    </span>
-                </div>
-
-                {/* --- RESULT SECTION (DYNAMIC) --- */}
-                {calculationResult.status === 'OBLIGATED' ? (
+                {/* STATUS CARD */}
+                {calculationResult.status === 'PAID' ? (
+                    // --- TAMPILAN JIKA SUDAH LUNAS ---
+                    <div className="bg-surface border border-emerald-500/30 p-6 rounded-2xl shadow-lg relative overflow-hidden animate-in zoom-in-95">
+                        <div className="flex items-center gap-3 mb-4"><div className="p-2 rounded-full bg-emerald-500 text-white shadow-lg"><BadgeCheck className="w-6 h-6" /></div><h3 className="text-lg font-bold text-white">{t('statusPaid')}</h3></div>
+                        <p className="text-sm text-gray-400 mb-2">{t('reasonPaid')}</p>
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl"><p className="text-emerald-400 text-xs font-bold uppercase">{t('zakatAmount')}</p><p className="text-2xl font-bold text-emerald-300">{formatCurrency(calculationResult.zakatAmount || 0)}</p></div>
+                    </div>
+                ) : calculationResult.status === 'OBLIGATED' ? (
+                    // --- TAMPILAN WAJIB BAYAR ---
                     <div className="bg-surface border border-white/10 p-6 rounded-2xl shadow-lg relative overflow-hidden animate-in zoom-in-95 group">
                         <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-25" style={{ backgroundColor: 'var(--color-primary)' }}></div>
-                        <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 blur-2xl" style={{ backgroundColor: 'var(--color-primary)' }}></div>
-                        
                         <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 rounded-full text-white shadow-lg" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                    <CheckCircle2 className="w-6 h-6" />
-                                </div>
-                                <h3 className="text-lg font-bold text-white">Wajib Zakat</h3>
-                            </div>
-
+                            <div className="flex items-center gap-3 mb-4"><div className="p-2 rounded-full text-white shadow-lg" style={{ backgroundColor: 'var(--color-primary)' }}><CheckCircle2 className="w-6 h-6" /></div><h3 className="text-lg font-bold text-white">{t('statusObligated')}</h3></div>
                             <div className="space-y-4">
-                                <div>
-                                    <p className="text-white/60 text-xs uppercase font-bold mb-1">Total Assets (Haul Met)</p>
-                                    <p className="text-2xl font-bold text-white">{formatCurrency(calculationResult.currentTotal)}</p>
-                                </div>
-                                
+                                <div><p className="text-white/60 text-xs uppercase font-bold mb-1">{t('totalAssets')}</p><p className="text-2xl font-bold text-white">{formatCurrency(calculationResult.currentTotal || 0)}</p></div>
                                 <div className="h-px w-full bg-white/10"></div>
-
-                                <div>
-                                    <p className="text-white/60 text-xs uppercase font-bold mb-1">Zakat Amount (2.5%)</p>
-                                    <p className="text-3xl font-bold text-yellow-400 drop-shadow-sm">{formatCurrency(calculationResult.zakatAmount)}</p>
-                                    
-                                    {/* --- DETAILED LOWEST BALANCE INFO --- */}
-                                    <div className="mt-3 p-3 rounded-xl bg-black/20 border border-white/5 flex flex-col gap-1">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[10px] text-white/70 uppercase font-bold">Basis Perhitungan (Terendah)</span>
-                                            <span className="text-sm font-bold text-white">{formatCurrency(calculationResult.minBalanceInYear)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[10px] text-white/50">Tanggal Saldo Terendah</span>
-                                            <span className="text-[10px] text-white/80 font-mono bg-white/10 px-1.5 py-0.5 rounded">
-                                                {format(calculationResult.minBalanceDate, 'd MMM yyyy')}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button 
-                                onClick={() => {
-                                    // 1. CARI AKUN OTOMATIS BERDASARKAN OWNER YANG AKTIF
-                                    // Filter: Milik Owner (atau Joint), Tipe Cash/Bank, Urutkan dari saldo terbesar
-                                    const recommendedAccount = accounts
-                                        .filter(a => a.owner === selectedOwner || !a.owner)
-                                        .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
-                                        .sort((a,b) => b.balance - a.balance)[0]; // Ambil yang saldo terbanyak
-
-                                    // 2. Set State
+                                <div><p className="text-white/60 text-xs uppercase font-bold mb-1">{t('zakatAmount')}</p><p className="text-3xl font-bold text-yellow-400 drop-shadow-sm">{formatCurrency(calculationResult.zakatAmount || 0)}</p></div>
+                                <button onClick={() => {
+                                    const recommendedAccount = accounts.filter(a => a.owner === selectedOwner || !a.owner).filter(a => a.group === 'Cash' || a.group === 'Bank Accounts').sort((a,b) => b.balance - a.balance)[0];
                                     setPaymentSourceAccountId(recommendedAccount ? recommendedAccount.id : '');
                                     setShowPayModal(true);
-                                }}
-                                className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-yellow-900/20 transition-all active:scale-95"
-                            >
-                                <HandCoins className="w-5 h-5" />
-                                Bayar Zakat Sekarang
-                            </button>
-
+                                }} className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-yellow-900/20 transition-all active:scale-95"><HandCoins className="w-5 h-5" />{t('payNow')}</button>
                             </div>
                         </div>
                     </div>
                 ) : (
+                    // --- TAMPILAN BELUM WAJIB ---
                     <div className="bg-surface border border-white/10 p-6 rounded-2xl shadow-lg animate-in zoom-in-95">
-                         <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-gray-700 rounded-full text-gray-300"><Info className="w-6 h-6" /></div>
-                            <h3 className="text-lg font-bold text-gray-200">Tidak Wajib Zakat</h3>
-                        </div>
-                        <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                            {calculationResult.status === 'HAUL_BROKEN' 
-                                ? `Total harta sempat turun di bawah nisab.`
-                                : `Total harta saat ini (${formatCurrency(calculationResult.currentTotal)}) belum mencapai nisab.`
-                            }
-                        </p>
-                        <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex gap-3 items-start">
-                             <AlertCircle className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
-                             <div>
-                                 <p className="text-gray-200 text-sm font-bold mb-1">Tetap Bisa Sedekah!</p>
-                                 <p className="text-gray-400 text-xs">Meski tidak wajib zakat mal, anjuran bersedekah tetap terbuka lebar.</p>
-                             </div>
-                        </div>
+                         <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-gray-700 rounded-full text-gray-300"><Info className="w-6 h-6" /></div><h3 className="text-lg font-bold text-gray-200">{t('statusNotObligated')}</h3></div>
+                        <p className="text-sm text-gray-400 mb-6 leading-relaxed">{t('reasonBelow')}</p>
+                        <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex gap-3 items-start"><AlertCircle className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" /><div><p className="text-gray-200 text-sm font-bold mb-1">{t('advice')}</p><p className="text-gray-400 text-xs">{t('adviceDesc')}</p></div></div>
                     </div>
                 )}
 
-                {/* PAY ZAKAT MODAL (FLOATING CENTER STYLE) */}
                 {showPayModal && (
                     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-                        {/* STYLE PERBAIKAN:
-                           1. max-w-sm: Ukuran lebar dibatasi (mirip Edit Account)
-                           2. rounded-2xl: Sudut membulat penuh
-                           3. animate-in zoom-in-95: Efek muncul pop-up (bukan slide dari bawah)
-                        */}
                         <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 overflow-hidden shadow-2xl animate-in zoom-in-95">
-                            
-                            {/* Header Modal */}
-                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b]">
-                                <h3 className="font-bold text-white text-lg">Bayar Zakat Mal</h3>
-                                <button onClick={() => setShowPayModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
-                            </div>
-
+                            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#18181b]"><h3 className="font-bold text-white text-lg">{t('modalTitle')}</h3><button onClick={() => setShowPayModal(false)}><X className="w-5 h-5 text-gray-400" /></button></div>
                             <div className="p-6 space-y-4">
-                                {/* Info Owner (Read Only) */}
-                                <div className="flex justify-between items-center mb-2">
-                                    <label className="text-xs text-gray-400 uppercase font-bold">Zakat Owner</label>
-                                    <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm bg-indigo-400/10 px-2 py-1 rounded-lg border border-indigo-400/20">
-                                        <UserCircle2 className="w-3 h-3" />
-                                        {selectedOwner === 'Husband' ? 'Suami' : 'Istri'}
-                                    </div>
-                                </div>
-
-                                {/* Source Account Selection (Context Aware) */}
-                                <div>
-                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Source Account</label>
-                                    <select 
-                                        value={paymentSourceAccountId} 
-                                        onChange={e => setPaymentSourceAccountId(e.target.value)} 
-                                        className="w-full bg-surface-light text-white p-3 rounded-xl border border-white/10 outline-none focus:border-indigo-500"
-                                    >
-                                        <option value="" disabled>Select Account</option>
-                                        {accounts
-                                            // LOGIC FIX: Filter hanya akun milik Owner yang dipilih (atau Joint)
-                                            .filter(a => a.owner === selectedOwner || !a.owner) 
-                                            .filter(a => a.group === 'Cash' || a.group === 'Bank Accounts')
-                                            .map(acc => (
-                                                <option key={acc.id} value={acc.id}>
-                                                    {acc.name} ({formatCurrency(acc.balance)})
-                                                </option>
-                                        ))}
-                                    </select>
-                                    <p className="text-[10px] text-gray-500 mt-1.5 ml-1">
-                                        * Hanya menampilkan akun {selectedOwner === 'Husband' ? 'Suami' : 'Istri'} & Joint.
-                                    </p>
-                                </div>
-                                
-                                {/* Amount Display */}
-                                <div>
-                                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Amount to Pay</label>
-                                    <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
-                                        <p className="text-2xl font-bold text-yellow-400">{formatCurrency(calculationResult.zakatAmount)}</p>
-                                    </div>
-                                </div>
-
-                                {/* Action Button */}
-                                <button 
-                                    onClick={handlePayZakat}
-                                    disabled={!paymentSourceAccountId}
-                                    className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-3.5 rounded-xl mt-2 transition-all shadow-lg shadow-yellow-900/20"
-                                >
-                                    Confirm Payment
-                                </button>
+                                <div className="flex justify-between items-center mb-2"><label className="text-xs text-gray-400 uppercase font-bold">{t('owner')}</label><div className="flex items-center gap-2 text-indigo-400 font-bold text-sm bg-indigo-400/10 px-2 py-1 rounded-lg border border-indigo-400/20"><UserCircle2 className="w-3 h-3" />{selectedOwner === 'Husband' ? t('husband') : t('wife')}</div></div>
+                                <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('source')}</label><select value={paymentSourceAccountId} onChange={e => setPaymentSourceAccountId(e.target.value)} className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 outline-none focus:border-indigo-500"><option value="" disabled>Select Account</option>{accounts.filter(a => a.owner === selectedOwner || !a.owner).filter(a => a.group === 'Cash' || a.group === 'Bank Accounts').map(acc => (<option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>))}</select><p className="text-[10px] text-gray-500 mt-1.5 ml-1">{t('sourceNote')} {selectedOwner === 'Husband' ? t('husband') : t('wife')}.</p></div>
+                                <div><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('amountPay')}</label><div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center"><p className="text-2xl font-bold text-yellow-400">{formatCurrency(calculationResult.zakatAmount || 0)}</p></div></div>
+                                <button onClick={handlePayZakat} disabled={!paymentSourceAccountId} className="w-full bg-yellow-600 disabled:opacity-50 hover:bg-yellow-700 text-white font-bold py-3.5 rounded-xl mt-2 transition-all shadow-lg shadow-yellow-900/20">{t('confirm')}</button>
                             </div>
                         </div>
                     </div>
                 )}
-
             </div>
         </div>
     );
