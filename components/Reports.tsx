@@ -1,5 +1,5 @@
-import React from 'react';
-import { Transaction, Account, MarketData } from '../types'; // FIX: Import dari types
+import React, { useState } from 'react';
+import { Transaction, Account, MarketData } from '../types'; // FIX: Import dari ../types
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, Wallet } from 'lucide-react';
 

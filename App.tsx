@@ -9,9 +9,8 @@ import AssetAnalytics, { AnalyticsScope } from './components/AssetAnalytics';
 import NonProfit from './components/NonProfit';
 import ZakatMal from './components/ZakatMal';
 import NotificationBell, { AppNotification } from './components/NotificationBell'; 
-// IMPORT TYPES DARI FILE TYPES.TS DI ROOT
 import { Account, Transaction, NonProfitAccount, NonProfitTransaction, AccountOwner, AccountGroup, MarketData } from './types';
-import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff, LogOut, Lock, Unlock } from 'lucide-react';
+import { Pipette, Palette, FileSpreadsheet, FileJson, Upload, ChevronRight, Download, Trash2, Plus, X, ArrowRightLeft, ArrowUpRight, ArrowDownRight, Settings, Edit3, Save, LogIn, UserPlus, TrendingUp, UserCircle2, Layers, Loader2, AlertTriangle, Eye, EyeOff, LogOut, Lock, Unlock, Pencil } from 'lucide-react';
 import { subDays, format, isSameMonth, parseISO, differenceInHours, subHours } from 'date-fns';
 
 const LockScreen = ({ onUnlock, correctPin, onForgot }: { onUnlock: () => void, correctPin: string, onForgot: () => void }) => {
@@ -30,14 +29,14 @@ const LockScreen = ({ onUnlock, correctPin, onForgot }: { onUnlock: () => void, 
             <div className="mb-8 flex flex-col items-center">
                 <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4 text-emerald-500"><div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div></div>
                 <h2 className="text-xl font-bold text-white mb-2">FinancePro Locked</h2>
-                <p className="text-sm text-gray-400">Enter your 6-digit PIN</p>
+                <p className="text-sm text-gray-400">Enter PIN to access</p>
             </div>
             <div className={`flex gap-4 mb-12 ${shake ? 'animate-shake' : ''}`}>{Array(6).fill(0).map((_, i) => (<div key={i} className={`w-4 h-4 rounded-full transition-all duration-200 ${i < input.length ? (error ? 'bg-red-500 scale-110' : 'bg-emerald-500 scale-110') : 'bg-white/10'}`} />))}</div>
             <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (<button key={num} onClick={() => handlePress(num.toString())} className="w-20 h-20 rounded-full bg-white/5 hover:bg-white/10 text-2xl font-bold text-white flex items-center justify-center">{num}</button>))}
                 <div className="w-20 h-20"></div>
                 <button onClick={() => handlePress('0')} className="w-20 h-20 rounded-full bg-white/5 hover:bg-white/10 text-2xl font-bold text-white flex items-center justify-center">0</button>
-                <button onClick={handleDelete} className="w-20 h-20 rounded-full text-white/50 hover:text-red-400 flex items-center justify-center"><Trash2 className="w-6 h-6" /></button>
+                <button onClick={handleDelete} className="w-20 h-20 rounded-full text-white/50 hover:text-red-400 transition-all active:scale-95 flex items-center justify-center"><Trash2 className="w-6 h-6" /></button>
             </div>
             <button onClick={onForgot} className="mt-12 text-sm text-gray-500 hover:text-emerald-500 transition-colors">Lupa PIN? (Logout & Reset)</button>
              <style>{`@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } } .animate-shake { animation: shake 0.3s ease-in-out; }`}</style>
@@ -45,7 +44,6 @@ const LockScreen = ({ onUnlock, correctPin, onForgot }: { onUnlock: () => void, 
     );
 };
 
-// GLOBAL CONSTANTS
 const DEFAULT_EXPENSE_CATEGORIES = ['Food & Drink', 'Groceries', 'Utilities', 'Transport', 'Shopping', 'Health', 'Education', 'Entertainment', 'Zakat & Charity', 'Other'];
 const DEFAULT_INCOME_CATEGORIES = ['Salary', 'Bonus', 'Gift', 'Investment Return', 'Freelance', 'Other'];
 
@@ -73,6 +71,7 @@ const App = () => {
 
   const [lang, setLang] = useState<'en' | 'id'>('en');
   const [currency, setCurrency] = useState<'IDR' | 'USD'>('IDR');
+  
   const [appPin, setAppPin] = useState<string>('');
   const [isLocked, setIsLocked] = useState(false);
   const [hasUnlockedSession, setHasUnlockedSession] = useState(false); 
@@ -145,21 +144,28 @@ const App = () => {
   }, [isDataLoaded]);
 
   // --- LOADERS & AUTH ---
-  // FIX: loadSettingsFromSupabase MOVED INSIDE
   const loadSettingsFromSupabase = async (userId: string) => { 
       const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single(); 
       if (data) { 
           if (data.language) setLang(data.language as 'en' | 'id'); 
-          // FIX LOCK LOGIC
-          if (data.app_pin) { 
-              setAppPin(data.app_pin); 
-              const isSessionUnlocked = sessionStorage.getItem('finance_unlocked') === 'true';
-              if (!isSessionUnlocked) setIsLocked(true); 
-          }
+          if (data.app_pin) { setAppPin(data.app_pin); if(!hasUnlockedSession) setIsLocked(true); }
       } 
   };
   
-  const loadDataFromSupabase = async (userId: string, isSilent = false) => { if (!isSilent) setIsLoading(true); try { const [accRes, txRes] = await Promise.all([ supabase.from('accounts').select('*').eq('user_id', userId), supabase.from('transactions').select('*').eq('user_id', userId), loadSettingsFromSupabase(userId) ]); if (accRes.data) setAccounts(accRes.data); if (txRes.data) setTransactions(txRes.data.map(t => ({ ...t, accountId: t.account_id, toAccountId: t.to_account_id, notes: t.note }))); } catch (err) { console.error(err); } finally { setIsDataLoaded(true); if (!isSilent) setIsLoading(false); } };
+  const loadDataFromSupabase = async (userId: string, isSilent = false) => { 
+      if (!isSilent) setIsLoading(true); 
+      try { 
+          const [accRes, txRes] = await Promise.all([ 
+              supabase.from('accounts').select('*').eq('user_id', userId), 
+              supabase.from('transactions').select('*').eq('user_id', userId), 
+              loadSettingsFromSupabase(userId) 
+          ]); 
+          if (accRes.data) setAccounts(accRes.data); 
+          // FIX: GANTI tx.data MENJADI txRes.data
+          if (txRes.data) setTransactions(txRes.data.map(t => ({ ...t, accountId: t.account_id, toAccountId: t.to_account_id, notes: t.note }))); 
+      } catch (err) { console.error(err); } 
+      finally { setIsDataLoaded(true); if (!isSilent) setIsLoading(false); } 
+  };
 
   useEffect(() => { 
     let mounted = true;
@@ -169,7 +175,7 @@ const App = () => {
     return () => { mounted = false; clearTimeout(timer); subscription.unsubscribe(); }; 
   }, []);
 
-  // --- FORCE DARK MODE ---
+  // FORCE DARK MODE
   useEffect(() => { 
       const root = document.documentElement; 
       root.style.setProperty('--color-primary', '#10b981'); 
@@ -178,73 +184,23 @@ const App = () => {
       root.style.setProperty('--bg-surface-light', '#3f3f46');
   }, []);
 
-  // Auth & Pin Handlers
+  // Handlers
   const handleLocalLogin = async () => { const { data, error } = await supabase.auth.signInWithPassword({ email: regEmail, password: regPass }); if (error) setAuthError(error.message); else setShowAuthModal(false); };
   const handleRegister = async () => { const { error } = await supabase.auth.signUp({ email: regEmail, password: regPass, options: { data: { display_name: regName } } }); if (error) setAuthError(error.message); else alert("Success! Check email."); };
-  
-  const handleLogout = async () => { 
-      await supabase.auth.signOut(); 
-      setUser(null); 
-      setAppPin(''); 
-      setIsLocked(false); 
-      sessionStorage.removeItem('finance_unlocked'); 
-  };
-  
-  const handleCreatePin = async () => { 
-      if(newPinInput.length===6) { 
-          setAppPin(newPinInput); 
-          setShowPinSetup(false); 
-          setHasUnlockedSession(true); // Auto unlock
-          if (user?.id) await supabase.from('user_settings').upsert({ user_id: user.id, app_pin: newPinInput }); 
-      } else { alert("Must be 6 digits"); } 
-  };
-  
-  const handleDisablePin = async () => { 
-      if (confirm("Disable App Lock?")) { 
-          setAppPin(''); 
-          setIsLocked(false); 
-          if (user?.id) await supabase.from('user_settings').upsert({ user_id: user.id, app_pin: null }); 
-      } 
-  };
-  
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setAppPin(''); setIsLocked(false); sessionStorage.removeItem('finance_unlocked'); };
+  const handleCreatePin = async () => { if(newPinInput.length===6) { setAppPin(newPinInput); setShowPinSetup(false); setHasUnlockedSession(true); if (user?.id) await supabase.from('user_settings').upsert({ user_id: user.id, app_pin: newPinInput }); } else { alert("Must be 6 digits"); } };
+  const handleDisablePin = async () => { if (confirm("Disable App Lock?")) { setAppPin(''); setIsLocked(false); if (user?.id) await supabase.from('user_settings').upsert({ user_id: user.id, app_pin: null }); } };
   const handleForgotPin = () => { if (confirm("Reset Data (Logout)?")) handleLogout(); };
-  
-  const onUnlockSuccess = () => { 
-      setIsLocked(false); 
-      sessionStorage.setItem('finance_unlocked', 'true'); 
-  };
+  const onUnlockSuccess = () => { setIsLocked(false); sessionStorage.setItem('finance_unlocked', 'true'); };
 
-  // Data Handlers
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if(!file) return; const r = new FileReader(); r.onload = (ev) => { try { const d = JSON.parse(ev.target?.result as string); if(d.accounts) { setAccounts(d.accounts); setTransactions(d.transactions||[]); alert("Restored!"); } } catch(e){ alert("Invalid File"); } }; r.readAsText(file); };
   const handleExportFile = (format: 'json' | 'csv') => { 
-      let content = "";
-      let mime = "application/json";
-      let name = "finance_backup.json";
-
-      if (format === 'json') {
-          content = JSON.stringify({accounts, transactions, nonProfitAccounts, nonProfitTransactions, expenseCategories, incomeCategories});
-      } else {
-          mime = "text/csv";
-          name = "transactions.csv";
-          const header = "Date,Type,Amount,Category,Account,Notes\n";
-          const rows = transactions.map(t => {
-              const accName = accounts.find(a=>a.id===t.accountId)?.name || 'Unknown';
-              return `${t.date},${t.type},${t.amount},${t.category},${accName},"${t.notes||''}"`;
-          }).join("\n");
-          content = header + rows;
-      }
-
-      const blob = new Blob([content], {type: mime});
-      const url = URL.createObjectURL(blob);
-      const node = document.createElement('a'); 
-      node.href = url; 
-      node.download = name; 
-      document.body.appendChild(node); 
-      node.click(); 
-      node.remove(); 
+      let content = "", mime = "application/json", name = "finance_backup.json";
+      if (format === 'json') content = JSON.stringify({accounts, transactions, nonProfitAccounts, nonProfitTransactions, expenseCategories, incomeCategories});
+      else { mime = "text/csv"; name = "transactions.csv"; content = "Date,Type,Amount,Category,Account,Notes\n" + transactions.map(t => `${t.date},${t.type},${t.amount},${t.category},${accounts.find(a=>a.id===t.accountId)?.name||'Unknown'},"${t.notes||''}"`).join("\n"); }
+      const blob = new Blob([content], {type: mime}); const url = URL.createObjectURL(blob); const node = document.createElement('a'); node.href = url; node.download = name; document.body.appendChild(node); node.click(); node.remove(); 
   };
 
-  // FIX: Restore Handlers
   const handleAddCategory = () => { const t = newTxType==='INCOME'?setIncomeCategories:setExpenseCategories; if(newCategoryName) t(p => [...p, newCategoryName]); setNewCategoryName(''); };
   const handleDeleteCategory = (cat: string) => { if(confirm('Delete?')) { const t = newTxType==='INCOME'?setIncomeCategories:setExpenseCategories; t(p => p.filter(c => c !== cat)); } };
   const handleClearHajjHistory = () => { if(confirm('Clear history?')) setNonProfitTransactions([]); };
@@ -263,11 +219,7 @@ const App = () => {
              if(acc) {
                  if(tx.type==='EXPENSE') acc.balance += tx.amount;
                  else if(tx.type==='INCOME') acc.balance -= tx.amount;
-                 else if(tx.type==='TRANSFER' && tx.toAccountId) {
-                     acc.balance += tx.amount;
-                     const dest = accMap.get(tx.toAccountId);
-                     if(dest) dest.balance -= tx.amount;
-                 }
+                 else if(tx.type==='TRANSFER' && tx.toAccountId) { acc.balance += tx.amount; const dest = accMap.get(tx.toAccountId); if(dest) dest.balance -= tx.amount; }
              }
           });
           return Array.from(accMap.values());
@@ -275,35 +227,11 @@ const App = () => {
   };
 
   const handleSaveAccountEdit = async () => { if(!editingAccount) return; if(user?.id) await supabase.from('accounts').update({ name: editingAccount.name, balance: editingAccount.balance }).eq('id', editingAccount.id); setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a)); setShowEditAccountModal(false); };
-  
-  // FIX: DELETE ACCOUNT & RELATIONS (SAFE DELETE)
-  const handleDeleteAccount = async (id: string) => { 
-      if(!confirm('Delete Account?')) return; 
-      // Optimistic
-      setAccounts(prev => prev.filter(a => a.id !== id));
-      if(user?.id) {
-          try {
-              await supabase.from('transactions').delete().eq('account_id', id);
-              await supabase.from('accounts').delete().eq('id', id);
-          } catch(e) { console.error(e); }
-      }
-  };
-
+  const handleDeleteAccount = async (id: string) => { if(confirm('Delete Account?')) { if(user?.id) { try { await supabase.from('transactions').delete().eq('account_id', id); await supabase.from('accounts').delete().eq('id', id); } catch(e){} } setAccounts(prev => prev.filter(a => a.id !== id)); } };
   const handleDeleteTransaction = async (id: string) => { handleDeleteBatch([id]); };
   
   const onAddPress = () => { setNewTxDate(format(new Date(), 'yyyy-MM-dd')); if (selectedAccountForDetail) { setNewTxAccountId(selectedAccountForDetail.id); setNewTxOwnerFilter(selectedAccountForDetail.owner || 'All'); } else { setNewTxAccountId(''); setNewTxOwnerFilter('All'); } setShowTransactionModal(true); };
-  
-  // FIX: TRANSACTION HANDLING & DEFINITION
-  const handleSubmitTransaction = async () => { 
-      const val = parseFloat(newTxAmount); if(!val || !newTxAccountId) return; 
-      // Define 'tx' explicitly here
-      const tx: Transaction = { id: `tx-${Date.now()}`, date: new Date().toISOString(), type: newTxType, amount: val, accountId: newTxAccountId, category: newTxCategory, notes: newTxNotes, toAccountId: newTxType==='TRANSFER'?newTxToAccountId:undefined }; 
-      if(user?.id) await supabase.from('transactions').insert([{ user_id: user.id, amount: val, type: newTxType, category: newTxCategory, note: newTxNotes, date: tx.date, account_id: newTxAccountId, to_account_id: tx.toAccountId }]); 
-      setTransactions(prev => [tx, ...prev]); 
-      setAccounts(prev => prev.map(a => { let b = a.balance; if(a.id===newTxAccountId) { if(newTxType==='INCOME') b+=val; else b-=val; } if(newTxType==='TRANSFER' && a.id===newTxToAccountId) b+=val; return {...a, balance: b}; })); 
-      setShowTransactionModal(false); setNewTxAmount(''); setNewTxNotes(''); 
-  };
-  
+  const handleSubmitTransaction = async () => { const val = parseFloat(newTxAmount); if(!val || !newTxAccountId) return; const tx: Transaction = { id: `tx-${Date.now()}`, date: new Date().toISOString(), type: newTxType, amount: val, accountId: newTxAccountId, category: newTxCategory, notes: newTxNotes, toAccountId: newTxType==='TRANSFER'?newTxToAccountId:undefined }; if(user?.id) await supabase.from('transactions').insert([{ user_id: user.id, amount: val, type: newTxType, category: newTxCategory, note: newTxNotes, date: tx.date, account_id: newTxAccountId, to_account_id: tx.toAccountId }]); setTransactions(prev => [tx, ...prev]); setAccounts(prev => prev.map(a => { let b = a.balance; if(a.id===newTxAccountId) { if(newTxType==='INCOME') b+=val; else b-=val; } if(newTxType==='TRANSFER' && a.id===newTxToAccountId) b+=val; return {...a, balance: b}; })); setShowTransactionModal(false); setNewTxAmount(''); setNewTxNotes(''); };
   const handleSubmitNewAccount = async () => { if(!newAccName) return; const acc: Account = { id: `acc_${Date.now()}`, name: newAccName, group: 'Bank Accounts', balance: parseFloat(newAccBalance)||0, currency: 'IDR', includeInTotals: true, owner: newAccOwner }; if(user?.id) await supabase.from('accounts').insert([{ id: acc.id, user_id: user.id, name: acc.name, balance: acc.balance, owner: acc.owner }]); setAccounts(prev => [...prev, acc]); setShowAddAccountModal(false); };
   const handleAddNonProfitAccount = (name: string, owner: AccountOwner, target: number, initialBalance: number) => { const newAcc: NonProfitAccount = { id: `np_${Date.now()}`, name, owner, balance: initialBalance, target }; setNonProfitAccounts(prev => [...prev, newAcc]); if(initialBalance > 0) setNonProfitTransactions(prev => [...prev, { id: `init_${Date.now()}`, date: new Date().toISOString(), amount: initialBalance, accountId: newAcc.id, notes: 'Saldo Awal' }]); };
   const handleDeleteNonProfitAccount = (id: string) => { if(confirm("Delete?")) { setNonProfitAccounts(prev => prev.filter(a => a.id !== id)); setNonProfitTransactions(prev => prev.filter(t => t.accountId !== id)); } };
@@ -316,7 +244,8 @@ const App = () => {
       const renderList = (list: Account[]) => (
           <div className="space-y-4">{['Cash','Bank Accounts','Credit Cards','Investments','Loans'].map(g => {
               const grp = list.filter(a => a.group === g); if(grp.length===0) return null;
-              return (<div key={g} className="bg-white/5 rounded-xl overflow-hidden border border-white/5"><div className="px-4 py-2 bg-white/5 flex justify-between"><div className="flex gap-2"><Layers className="w-3 h-3 text-gray-400"/><span className="text-xs font-bold text-gray-300 uppercase">{g}</span></div><span className="text-xs font-bold text-emerald-400">{formatCurrency(grp.reduce((s,a)=>s+a.balance,0))}</span></div><div className="divide-y divide-white/5">{grp.map(a => <AccountCard key={a.id} account={a} onEdit={a => setSelectedAccountForDetail(a)} listView={true} isDeleteMode={isManageMode} onDelete={() => handleDeleteAccount(a.id)} />)}</div></div>);
+              // PASS ONRENAME PROP HERE
+              return (<div key={g} className="bg-white/5 rounded-xl overflow-hidden border border-white/5"><div className="px-4 py-2 bg-white/5 flex justify-between"><div className="flex gap-2"><Layers className="w-3 h-3 text-gray-400"/><span className="text-xs font-bold text-gray-300 uppercase">{g}</span></div><span className="text-xs font-bold text-emerald-400">{formatCurrency(grp.reduce((s,a)=>s+a.balance,0))}</span></div><div className="divide-y divide-white/5">{grp.map(a => <AccountCard key={a.id} account={a} onEdit={a => setSelectedAccountForDetail(a)} listView={true} isDeleteMode={isManageMode} onDelete={() => handleDeleteAccount(a.id)} onRename={(acc) => openEditAccountModal(acc)} />)}</div></div>);
           })}</div>
       );
       const hus = accounts.filter(a => a.owner==='Husband'), wif = accounts.filter(a => a.owner==='Wife');
@@ -342,21 +271,17 @@ const App = () => {
           case 'accounts': return renderAccountsTab();
           case 'non-profit': return <NonProfit accounts={nonProfitAccounts} transactions={nonProfitTransactions} mainAccounts={accounts} onClearHistory={handleClearHajjHistory} lang={lang} currency={currency} onAddAccount={handleAddNonProfitAccount} onDeleteAccount={handleDeleteNonProfitAccount} onAddTransaction={(tx, src)=>{ setNonProfitTransactions(p=>[...p, tx]); if(src) { const t: Transaction = { id:'tr-'+tx.id, date:tx.date, type:'EXPENSE', amount:tx.amount, accountId:src, category:'Non-Profit Transfer', notes:'Transfer to '+tx.accountId }; setTransactions(p=>[t,...p]); setAccounts(p=>p.map(a=>a.id===src?{...a, balance:a.balance-tx.amount}:a)); } }} onUpdateBalance={(id, bal)=>setNonProfitAccounts(p=>p.map(a=>a.id===id?{...a, balance:bal}:a))} onComplete={(id)=>setNonProfitAccounts(p=>p.map(a=>a.id===id?{...a, balance:0}:a))} />;
           case 'zakat': return <ZakatMal accounts={accounts} transactions={transactions} onAddTransaction={(tx)=>{ setTransactions(p=>[tx,...p]); setAccounts(p=>p.map(a=>a.id===tx.accountId?{...a, balance:a.balance-tx.amount}:a)); }} />;
-          
           case 'more': return (
              <div className="p-4 space-y-4 overflow-y-auto h-full pb-24">
                 {user && <div className="bg-surface p-4 rounded-xl border border-white/10 flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-full flex items-center justify-center text-white font-bold">{user.name.charAt(0).toUpperCase()}</div><div><p className="font-bold text-white">{user.name}</p><p className="text-xs text-gray-400">{user.email}</p></div></div><button onClick={handleLogout} className="text-xs text-red-400 border border-red-400/30 px-3 py-1.5 rounded-lg hover:bg-red-400/10">Log Out</button></div>}
-                
                 <div className="bg-surface p-4 rounded-xl border border-white/10">
                    <h3 className="font-bold text-lg mb-4 text-white">{t('settings')}</h3>
                    <div className="space-y-4">
                       <button onClick={()=>setLang(lang==='en'?'id':'en')} className="w-full flex items-center justify-between p-3 bg-white/5 rounded-lg"><span>{t('language')}</span><span className="text-primary font-bold">{lang.toUpperCase()}</span></button>
                       <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg"><span>Currency</span><div className="flex bg-black/20 p-1 rounded-lg"><button onClick={()=>setCurrency('IDR')} className={`px-3 py-1 rounded-md text-xs font-bold ${currency==='IDR'?'bg-emerald-600 text-white':'text-gray-500'}`}>IDR</button><button onClick={()=>setCurrency('USD')} className={`px-3 py-1 rounded-md text-xs font-bold ${currency==='USD'?'bg-blue-600 text-white':'text-gray-500'}`}>USD</button></div></div>
-                      {/* ENABLE/DISABLE PIN */}
                       <div className="bg-white/5 p-3 rounded-lg flex items-center justify-between"><div><p className="text-sm font-medium flex items-center gap-2">{appPin ? <Lock className="w-4 h-4 text-emerald-500"/> : <Unlock className="w-4 h-4 text-gray-500"/>} App Lock</p></div>{appPin ? <button onClick={handleDisablePin} className="text-xs font-bold text-red-400 border border-red-400/30 px-3 py-1.5 rounded-lg">Disable</button> : <button onClick={()=>setShowPinSetup(true)} className="text-xs font-bold text-emerald-400 border border-emerald-400/30 px-3 py-1.5 rounded-lg">Enable</button>}</div>
                    </div>
                 </div>
-
                 <div className="bg-surface p-4 rounded-xl border border-white/10">
                    <h3 className="font-bold text-lg mb-4 text-white">{t('dataMgmt')}</h3>
                    <div className="space-y-2">
@@ -376,13 +301,14 @@ const App = () => {
 
   return (
     <Layout activeTab={activeTab} setActiveTab={handleTabChange} onAddPress={onAddPress} user={user} onAuthRequest={()=>{setShowAuthModal(true);setAuthMode('LOGIN');}} onLogout={handleLogout} lang={lang} setLang={setLang}>
-        {/* FIX: LOCKSCREEN LOGIC (HANYA JIKA BELUM UNLOCK & PIN ADA) */}
         {isLocked && appPin && !hasUnlockedSession && <LockScreen correctPin={appPin} onUnlock={onUnlockSuccess} onForgot={handleForgotPin} />}
         <NotificationBell notifications={notifications} onMarkAsRead={handleMarkAsRead} onClearAll={handleClearNotifications} />
         {renderContent()}
         {showAddAccountModal && (<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"><div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6"><h3 className="text-lg font-bold text-white mb-4">Add Account</h3><input type="text" value={newAccName} onChange={e=>setNewAccName(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 mb-4 text-white" placeholder="Name"/><button onClick={handleSubmitNewAccount} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl">Save</button></div></div>)}
         {showTransactionModal && (<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4"><div className="w-full max-w-md bg-surface rounded-2xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh]"><div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white">New Transaction</h3><button onClick={()=>setShowTransactionModal(false)}><X className="w-6 h-6 text-gray-400"/></button></div><div className="p-6 space-y-4 overflow-y-auto"><CurrencyInput value={newTxAmount} onChange={setNewTxAmount} currency={currency} className="bg-black/50 border border-white/10 rounded-xl p-4 text-2xl font-bold text-white text-right"/><div className="grid grid-cols-1 gap-4"><select value={newTxAccountId} onChange={e=>setNewTxAccountId(e.target.value)} className="w-full bg-white/5 p-3 rounded-xl border border-white/10 text-white"><option value="" disabled>Select Account</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div><button onClick={handleSubmitTransaction} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">Save</button></div></div></div>)}
         {showAuthModal && (<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"><div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6"><h3 className="text-lg font-bold text-white mb-6">{authMode==='LOGIN'?'Login':'Register'}</h3>{authError && <p className="text-red-400 text-xs mb-4">{authError}</p>}<div className="space-y-4"><input type="email" placeholder="Email" value={regEmail} onChange={e=>setRegEmail(e.target.value)} className="w-full bg-white/5 p-3 rounded-xl text-white"/><input type="password" placeholder="Password" value={regPass} onChange={e=>setRegPass(e.target.value)} className="w-full bg-white/5 p-3 rounded-xl text-white"/>{authMode==='LOGIN'?<button onClick={handleLocalLogin} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl">Login</button>:<button onClick={handleRegister} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">Register</button>}</div></div></div>)}
+        {/* EDIT ACCOUNT MODAL (DENGAN PENCIL) */}
+        {showEditAccountModal && editingAccount && (<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"><div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 shadow-2xl animate-in zoom-in-95 duration-200"><div className="text-center mb-6"><Pencil className="w-12 h-12 text-amber-500 mx-auto mb-4 bg-amber-500/10 p-3 rounded-full" /><h3 className="text-lg font-bold text-white">Edit Account</h3><p className="text-xs text-gray-400 mt-1">{editingAccount.name}</p></div><form onSubmit={(e) => { e.preventDefault(); handleSaveAccountEdit(); }} className="space-y-4"><div className="text-left"><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Account Name</label><input type="text" value={editingAccount.name} onChange={e => setEditingAccount({...editingAccount, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-primary"/></div><div className="text-left"><label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Current Balance</label><CurrencyInput value={editingAccount.balance} onChange={val => setEditingAccount({...editingAccount, balance: parseFloat(val) || 0})} currency={currency} className="w-full bg-black/30 border border-white/20 rounded-xl p-4 text-2xl font-bold text-amber-500 text-center outline-none focus:border-amber-500" /></div><div className="flex gap-3 pt-2"><button type="button" onClick={() => setShowEditAccountModal(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium">Cancel</button><button type="submit" className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold">Update</button></div></form></div></div>)}
         {/* PIN SETUP MODAL */}
         {showPinSetup && (<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"><div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6 text-center"><h3 className="text-lg font-bold text-white mb-4">Set New PIN</h3><input type="text" maxLength={6} value={newPinInput} onChange={e=>setNewPinInput(e.target.value.replace(/\D/g,''))} className="bg-black/50 border border-emerald-500/50 text-white text-3xl font-bold tracking-[0.5em] text-center w-full py-4 rounded-xl outline-none mb-4" placeholder="••••••" autoFocus/><button onClick={handleCreatePin} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl">Save PIN</button></div></div>)}
     </Layout>
