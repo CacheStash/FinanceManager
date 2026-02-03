@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
 import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock, BadgeCheck } from 'lucide-react';
-import { subDays, parseISO, format, isAfter } from 'date-fns';
+import { subDays, parseISO, format, isAfter, addDays } from 'date-fns';
 
 interface ZakatMalProps {
     accounts: Account[];
@@ -68,20 +68,29 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
 
     // --- CALCULATION ENGINE ---
     const calculationResult = useMemo(() => {
+        // --- MULAI KODE BARU: LOGIKA HAUL & PAID ---
         const NISAB_GRAMS = 85;
         const nisabValue = goldPrice * NISAB_GRAMS;
-        const haulStartDate = subDays(new Date(), 354); // 1 Tahun Hijriah yang lalu
+        const haulCycleDays = 354; // Siklus 1 tahun Hijriah
+        const haulStartDate = subDays(new Date(), haulCycleDays);
 
-        // 1. Cek apakah sudah bayar Zakat Mal di periode haul ini (setelah start date)
         const alreadyPaidTx = transactions.find(tx => 
             tx.category === 'Zakat Mal' && 
             isAfter(parseISO(tx.date), haulStartDate) &&
-            tx.notes?.includes(selectedOwner) // Cek pemilik
+            tx.notes?.includes(selectedOwner)
         );
 
         if (alreadyPaidTx) {
-            return { status: 'PAID', zakatAmount: alreadyPaidTx.amount, haulStartDate, paidDate: alreadyPaidTx.date };
+            // HITUNG TANGGAL HAUL BERIKUTNYA
+            const nextHaulDate = addDays(parseISO(alreadyPaidTx.date), haulCycleDays);
+            return { 
+                status: 'PAID', 
+                zakatAmount: alreadyPaidTx.amount, 
+                paidDate: alreadyPaidTx.date,
+                nextHaulDate: format(nextHaulDate, 'dd MMMM yyyy') // Tampilkan di UI
+            };
         }
+        // --- SELESAI KODE BARU ---
 
         const ownerAccounts = accounts.filter(a => a.owner === selectedOwner);
         const currentTotalAssets = ownerAccounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -138,7 +147,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
         onAddTransaction(tx);
         setShowPayModal(false);
     };
-    
+
     return (
         <div className="flex flex-col h-full bg-background pb-40 overflow-y-auto">
             <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">
@@ -167,6 +176,14 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                         <div className="flex items-center gap-3 mb-4"><div className="p-2 rounded-full bg-emerald-500 text-white shadow-lg"><BadgeCheck className="w-6 h-6" /></div><h3 className="text-lg font-bold text-white">{t('statusPaid')}</h3></div>
                         <p className="text-sm text-gray-400 mb-2">{t('reasonPaid')}</p>
                         <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl"><p className="text-emerald-400 text-xs font-bold uppercase">{t('zakatAmount')}</p><p className="text-2xl font-bold text-emerald-300">{formatCurrency(calculationResult.zakatAmount || 0)}</p></div>
+                    {/* UPDATE: Info Periode Haul Berikutnya */}
+                        <div className="mt-4 pt-3 border-t border-emerald-500/10">
+                            <p className="text-[10px] text-emerald-500/50 uppercase font-bold tracking-widest mb-1">
+                                {lang === 'en' ? 'Next Haul Assessment:' : 'Penghitungan Haul Berikutnya:'}
+                            </p>
+                            <p className="text-sm text-white font-medium">{calculationResult.nextHaulDate}</p>
+                        </div>
+                    
                     </div>
                 ) : calculationResult.status === 'OBLIGATED' ? (
                     // --- TAMPILAN WAJIB BAYAR ---

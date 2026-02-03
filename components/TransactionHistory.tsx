@@ -238,10 +238,36 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, a
            </div>
         ) : (
           filteredTransactions.slice(0, 100).map((tx) => {
+            // --- MULAI KODE SISIPAN KHUSUS HAPUS AKUN ---
+            if (tx.accountId === 'deleted-account') {
+                const [delName, delOwner] = (tx.notes || '').split('|');
+                return (
+                    <div key={tx.id} className="w-full p-4 border-b border-white/5 bg-red-500/5 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 rounded-full bg-red-500/10 text-red-500 shrink-0">
+                                <Trash2 className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-red-400">Account Deleted</p>
+                                <p className="text-[10px] text-gray-500">{format(new Date(tx.date), 'dd MMM yyyy')}</p>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                    <span className="text-[10px] text-gray-400 font-bold bg-white/5 px-1.5 py-0.5 rounded">User / Admin</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm font-bold text-gray-300">{delName || 'Unknown Account'}</p>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{delOwner || '-'}</p>
+                        </div>
+                    </div>
+                );
+            }
+            // --- SELESAI KODE SISIPAN ---
             const isAdjustment = tx.category === 'Adjustment';
             let amountColor = 'text-gray-200';
             let sign = '';
-            
+
+
             if (isAdjustment) {
                 if (tx.type === 'EXPENSE') { amountColor = 'text-red-500'; sign = '-'; }
                 else { amountColor = 'text-emerald-500'; sign = '+'; }
