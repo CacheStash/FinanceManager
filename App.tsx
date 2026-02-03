@@ -53,6 +53,7 @@ import {
   RefreshCw,
   Type,
   ChevronDown,
+  TrendingDown
 } from "lucide-react";
 import {
   subDays,
@@ -277,6 +278,7 @@ const App = () => {
 
   // Settings
   const [lang, setLang] = useState<"en" | "id">("en");
+  const [isZakatHidden, setIsZakatHidden] = useState(false);
   const [currency, setCurrency] = useState<"IDR" | "USD">("IDR");
 
   // Customization (Dikembalikan)
@@ -509,6 +511,7 @@ const App = () => {
       .single();
     if (data) {
       if (data.language) setLang(data.language);
+            if (data.is_zakat_hidden !== undefined) setIsZakatHidden(data.is_zakat_hidden);
 
       // Logic Lock Screen: Cek sessionStorage
       if (data.app_pin) {
@@ -694,6 +697,7 @@ const App = () => {
         supabase.from("user_settings").upsert({
           user_id: user.id,
           accent_color: accent,
+          is_zakat_hidden: isZakatHidden,
           bg_theme: JSON.stringify({
             customBg: customBgHex,
             customText: customTextHex,
@@ -1251,6 +1255,25 @@ const App = () => {
 
   // --- RENDER ACCOUNTS ---
   const renderAccountsTab = () => {
+    // Helper untuk cek apakah aset naik/turun bulan ini
+    const getNetTrend = (owner: 'All' | AccountOwner) => {
+        const now = new Date();
+        const monthlyTxs = transactions.filter(tx => isSameMonth(parseISO(tx.date), now));
+        let net = 0;
+        monthlyTxs.forEach(tx => {
+            const acc = accounts.find(a => a.id === tx.accountId);
+            if (owner === 'All' || acc?.owner === owner) {
+                if (tx.type === 'INCOME') net += tx.amount;
+                if (tx.type === 'EXPENSE') net -= tx.amount;
+            }
+        });
+        return net;
+    };
+
+    const totalNet = getNetTrend('All');
+    const husNet = getNetTrend('Husband');
+    const wifNet = getNetTrend('Wife');
+
     const formatCurrency = (v: number) =>
       new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -1301,74 +1324,39 @@ const App = () => {
     const hus = accounts.filter((a) => a.owner === "Husband"),
       wif = accounts.filter((a) => a.owner === "Wife");
     return (
-      <div className="p-4 space-y-6 pb-24 overflow-y-auto h-full">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-surface p-4 rounded-xl border border-white/10 group relative overflow-hidden">
-            <div className="absolute inset-0 bg-emerald-500/10 opacity-50"></div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* TOTAL ASSETS CARD */}
+          <div className="bg-surface p-4 rounded-xl border border-white/10 group relative overflow-hidden h-24 flex flex-col justify-center">
+            <div className={`absolute inset-0 opacity-20 transition-opacity ${totalNet >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}></div>
+            {/* Background Graphic */}
+            {/* Background Graphic: Geser ke kiri (right-6) agar tidak terpotong */}
+            <div className={`absolute right-6 -bottom-2 opacity-10 rotate-[-15deg] pointer-events-none transition-all duration-500 group-hover:scale-110 group-hover:-translate-x-2 ${totalNet >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {totalNet >= 0 ? <TrendingUp size={80} strokeWidth={2.5} /> : <TrendingDown size={80} strokeWidth={2.5} />}
+            </div>
             <div className="relative">
-              <p className="text-emerald-400 text-xs font-bold uppercase mb-1">
-                Total Assets
-              </p>
-              <p className="text-2xl font-bold text-white">
-                {formatCurrency(accounts.reduce((s, a) => s + a.balance, 0))}
-              </p>
+              <p className="text-emerald-400 text-xs font-bold uppercase mb-1">Total Assets</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(accounts.reduce((s, a) => s + a.balance, 0))}</p>
             </div>
           </div>
-          <div className="bg-surface p-4 rounded-xl border border-white/10">
-            <p className="text-gray-400 text-xs font-bold uppercase mb-2">
-              Husband
-            </p>
-            <p className="text-xl font-bold text-indigo-400">
-              {formatCurrency(hus.reduce((s, a) => s + a.balance, 0))}
-            </p>
-          </div>
-          <div className="bg-surface p-4 rounded-xl border border-white/10">
-            <p className="text-gray-400 text-xs font-bold uppercase mb-2">
-              Wife
-            </p>
-            <p className="text-xl font-bold text-pink-400">
-              {formatCurrency(wif.reduce((s, a) => s + a.balance, 0))}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowAddAccountModal(true)}
-            className="flex-1 py-3 bg-indigo-600 font-bold rounded-xl text-white shadow-lg flex justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" /> Add Account
-          </button>
-          <button
-            onClick={() => setIsManageMode(!isManageMode)}
-            className={`px-4 py-3 font-bold rounded-xl flex justify-center gap-2 shadow-lg ${isManageMode ? "bg-rose-600 text-white" : "bg-white/10 text-gray-300"}`}
-          >
-            {isManageMode ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Edit3 className="w-5 h-5" />
-            )}{" "}
-            {isManageMode ? "Done" : "Manage"}
-          </button>
-        </div>
-        <div className="space-y-8">
-          {hus.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-bold text-indigo-400 uppercase pl-1">
-                Husband's Accounts
-              </h3>
-              {renderList(hus)}
+
+          {/* HUSBAND CARD */}
+          <div className="bg-surface p-4 rounded-xl border border-white/10 group relative overflow-hidden h-24 flex flex-col justify-center">
+            <div className={`absolute right-6 -bottom-2 opacity-10 rotate-[-15deg] pointer-events-none transition-all duration-500 group-hover:scale-110 group-hover:-translate-x-2 ${husNet >= 0 ? 'text-indigo-500' : 'text-red-500'}`}>
+                {husNet >= 0 ? <TrendingUp size={80} strokeWidth={2.5} /> : <TrendingDown size={80} strokeWidth={2.5} />}
             </div>
-          )}
-          {wif.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-bold text-pink-400 uppercase pl-1">
-                Wife's Accounts
-              </h3>
-              {renderList(wif)}
+            <p className="text-gray-400 text-xs font-bold uppercase mb-2 relative">Husband</p>
+            <p className="text-xl font-bold text-indigo-400 relative">{formatCurrency(hus.reduce((s, a) => s + a.balance, 0))}</p>
+          </div>
+
+          {/* WIFE CARD */}
+          <div className="bg-surface p-4 rounded-xl border border-white/10 group relative overflow-hidden h-24 flex flex-col justify-center">
+            <div className={`absolute right-6 -bottom-2 opacity-10 rotate-[-15deg] pointer-events-none transition-all duration-500 group-hover:scale-110 group-hover:-translate-x-2 ${wifNet >= 0 ? 'text-pink-500' : 'text-red-500'}`}>
+                {wifNet >= 0 ? <TrendingUp size={80} strokeWidth={2.5} /> : <TrendingDown size={80} strokeWidth={2.5} />}
             </div>
-          )}
+            <p className="text-gray-400 text-xs font-bold uppercase mb-2 relative">Wife</p>
+            <p className="text-xl font-bold text-pink-400 relative">{formatCurrency(wif.reduce((s, a) => s + a.balance, 0))}</p>
+          </div>
         </div>
-      </div>
     );
   };
 
@@ -1575,6 +1563,8 @@ const App = () => {
                     .eq("id", tx.accountId);
               }
             }}
+            isZakatHidden={isZakatHidden}
+              onToggleVisibility={() => setIsZakatHidden(!isZakatHidden)}
           />
         );
 
@@ -2329,9 +2319,17 @@ const App = () => {
       {showAuthModal && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4">
           <div className="w-full max-w-sm bg-surface rounded-2xl border border-white/10 p-6">
-            <h3 className="text-lg font-bold text-white mb-6">
-              {authMode === "LOGIN" ? "Login" : "Register"}
-            </h3>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-white">
+                {authMode === "LOGIN" ? "Login" : "Register"}
+              </h3>
+              <button 
+                onClick={() => setShowAuthModal(false)}
+                className="p-1 hover:bg-white/10 rounded-full text-gray-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             {authError && (
               <p className="text-red-400 text-xs mb-4">{authError}</p>
             )}
@@ -2343,13 +2341,22 @@ const App = () => {
                 onChange={(e) => setRegEmail(e.target.value)}
                 className="w-full bg-white/5 p-3 rounded-xl text-white"
               />
-              <input
-                type="password"
-                placeholder="Password"
-                value={regPass}
-                onChange={(e) => setRegPass(e.target.value)}
-                className="w-full bg-white/5 p-3 rounded-xl text-white"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={regPass}
+                  onChange={(e) => setRegPass(e.target.value)}
+                  className="w-full bg-white/5 p-3 rounded-xl text-white pr-10"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {authMode === "LOGIN" ? (
                 <button
                   onClick={handleLocalLogin}

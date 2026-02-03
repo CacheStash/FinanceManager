@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
-import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock, BadgeCheck } from 'lucide-react';
+import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock, BadgeCheck, Eye, EyeOff } from 'lucide-react';
 import { subDays, parseISO, format, isAfter, addDays } from 'date-fns';
 
 interface ZakatMalProps {
@@ -10,9 +10,11 @@ interface ZakatMalProps {
     // FIX: Ganti WARNING -> ALERT
     onNotify: (title: string, msg: string, type: 'INFO' | 'ALERT' | 'SUCCESS') => void; 
     lang?: 'en' | 'id';
+    isZakatHidden: boolean; // Tambah ini
+    onToggleVisibility: () => void; // Tambah ini
 }
 
-const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en' }) => {
+const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en', isZakatHidden, onToggleVisibility }) => {
     const [goldPrice, setGoldPrice] = useState<number>(1400000);
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
@@ -175,7 +177,20 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                     <div className="bg-surface border border-emerald-500/30 p-6 rounded-2xl shadow-lg relative overflow-hidden animate-in zoom-in-95">
                         <div className="flex items-center gap-3 mb-4"><div className="p-2 rounded-full bg-emerald-500 text-white shadow-lg"><BadgeCheck className="w-6 h-6" /></div><h3 className="text-lg font-bold text-white">{t('statusPaid')}</h3></div>
                         <p className="text-sm text-gray-400 mb-2">{t('reasonPaid')}</p>
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl"><p className="text-emerald-400 text-xs font-bold uppercase">{t('zakatAmount')}</p><p className="text-2xl font-bold text-emerald-300">{formatCurrency(calculationResult.zakatAmount || 0)}</p></div>
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl flex justify-between items-center">
+                        <div>
+                            <p className="text-emerald-400 text-xs font-bold uppercase">{t('zakatAmount')}</p>
+                            <p className="text-2xl font-bold text-emerald-300">
+                                {isZakatHidden ? 'Rp ••••••••' : formatCurrency(calculationResult.zakatAmount || 0)}
+                            </p>
+                        </div>
+                        <button 
+                            onClick={onToggleVisibility}
+                            className="p-2 hover:bg-white/10 rounded-full text-emerald-500/50 transition-colors"
+                        >
+                            {isZakatHidden ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                        </button>
+                    </div>
                     {/* UPDATE: Info Periode Haul Berikutnya */}
                         <div className="mt-4 pt-3 border-t border-emerald-500/10">
                             <p className="text-[10px] text-emerald-500/50 uppercase font-bold tracking-widest mb-1">
