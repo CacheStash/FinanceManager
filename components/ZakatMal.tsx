@@ -15,12 +15,27 @@ interface ZakatMalProps {
 }
 
 const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en', isZakatHidden, onToggleVisibility }) => {
-    const [goldPrice, setGoldPrice] = useState<number>(1400000);
+    const [goldPrice, setGoldPrice] = useState<number>(0); // Mulai dari 0
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
     const [showPayModal, setShowPayModal] = useState(false);
     const [paymentSourceAccountId, setPaymentSourceAccountId] = useState('');
 
+    // --- KOMPONEN LOADING ---
+    const LoadingPulse = () => (
+        <div className="flex items-center gap-3 ml-2">
+            {/* Circle Dot Animation */}
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            {/* Text Loading */}
+            <span className="text-xs text-emerald-500/70 font-bold uppercase animate-pulse tracking-wider">
+                Loading Data...
+            </span>
+        </div>
+    );
+    
     // --- DICTIONARY ---
     const t = (key: string) => {
         const dict: any = {
@@ -70,6 +85,8 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
 
     // --- CALCULATION ENGINE ---
     const calculationResult = useMemo(() => {
+            // Jika harga emas 0 (Loading/Error), hentikan perhitungan
+        if (goldPrice === 0) return { status: 'LOADING' };
         // --- MULAI KODE BARU: LOGIKA HAUL & PAID ---
         const NISAB_GRAMS = 85;
         const nisabValue = goldPrice * NISAB_GRAMS;
@@ -167,7 +184,26 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                     </div>
                     <div>
                         <div className="flex justify-between items-center mb-2"><label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">{t('goldPrice')}</label><button onClick={fetchLiveGoldPrice} disabled={isFetchingPrice} className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 transition-all disabled:opacity-50">{isFetchingPrice ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}{t('liveUpdate')}</button></div>
-                        <div className="relative group"><input type="text" value={formatCurrency(goldPrice)} readOnly className="w-full bg-[#18181b] border border-white/10 rounded-xl p-4 pl-12 text-lg font-bold text-gray-400 outline-none cursor-not-allowed opacity-80" /><div className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/5 p-1.5 rounded-lg"><Lock className="w-4 h-4 text-gray-500" /></div></div>
+                        {/* UPDATE: Loading Animation State */}
+                        <div className="relative group bg-[#18181b] border border-white/10 rounded-xl p-4 flex items-center h-[60px]">
+                            <div className="bg-white/5 p-1.5 rounded-lg mr-3">
+                                <Lock className="w-4 h-4 text-gray-500" />
+                            </div>
+                            
+                            {goldPrice === 0 ? (
+                                <div className="flex items-center">
+                                    <span className="text-lg font-bold text-gray-500 mr-2">Rp 0</span>
+                                    <LoadingPulse />
+                                </div>
+                            ) : (
+                                <input 
+                                    type="text" 
+                                    value={formatCurrency(goldPrice)} 
+                                    readOnly 
+                                    className="w-full bg-transparent text-lg font-bold text-gray-400 outline-none cursor-not-allowed" 
+                                />
+                            )}
+                        </div>
                     </div>
                 </div>
 

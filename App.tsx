@@ -269,8 +269,8 @@ const App = () => {
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [marketData, setMarketData] = useState<MarketData>({
-    usdRate: 15850,
-    goldPrice: 1350000,
+    usdRate: 0,
+    goldPrice: 0,
     usdChange: 0,
     goldChange: 0,
     lastUpdated: "",
@@ -380,9 +380,9 @@ const App = () => {
             gold_price: Math.floor(dataGold.items[0].xauPrice / 31.1035),
           };
         }
-        return null; // Gagal mendapatkan data live
+        return { usd_price: 0, gold_price: 0 };
       } catch (e) {
-        return null;
+        return { usd_price: 0, gold_price: 0 };
       }
     };
 
@@ -417,8 +417,8 @@ const App = () => {
 
       if (insert) {
         const newData = await fetchApiData();
-        // --- MULAI SISIPKAN DI SINI ---
-        if (newData) {
+        // --- LOGIKA BARU: HANYA INSERT JIKA DATA VALID (> 0) ---
+        if (newData && newData.usd_price > 0 && newData.gold_price > 0) {
           const { data: ins } = await supabase
             .from("market_logs")
             .insert([
@@ -431,10 +431,10 @@ const App = () => {
             .select()
             .single();
 
-          // Bandingkan untuk notifikasi hanya jika data berhasil di-fetch
-          if (prev) {
-            const safePrevUsd = prev.usd_price || 16773;
-            const safePrevGold = prev.gold_price || 2681000;
+          // Bandingkan untuk notifikasi
+          if (prev && prev.usd_price > 0) { // Pastikan prev data juga valid
+            const safePrevUsd = prev.usd_price;
+            const safePrevGold = prev.gold_price;
             const usdChg =
               ((newData.usd_price - safePrevUsd) / safePrevUsd) * 100;
             const goldChg =
@@ -450,7 +450,7 @@ const App = () => {
           prev = latest;
           latest = ins;
 
-          // Bersihkan baris lama (hanya simpan 2 terbaru)
+          // Bersihkan baris lama
           if (latest && prev) {
             await supabase
               .from("market_logs")
@@ -458,7 +458,7 @@ const App = () => {
               .not("id", "in", `(${latest.id},${prev.id})`);
           }
         }
-        // --- SELESAI SISIPKAN ---
+        // --- SELESAI LOGIKA BARU ---
 
         const { data: ins } = await supabase
           .from("market_logs")
