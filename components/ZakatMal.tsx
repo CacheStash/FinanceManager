@@ -12,14 +12,23 @@ interface ZakatMalProps {
     lang?: 'en' | 'id';
     isZakatHidden: boolean; // Tambah ini
     onToggleVisibility: () => void; // Tambah ini
+    initialGoldPrice?: number; // <--- TAMBAHKAN INI
 }
 
-const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en', isZakatHidden, onToggleVisibility }) => {
+const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en', isZakatHidden, onToggleVisibility, initialGoldPrice = 0 }) => {
     const [goldPrice, setGoldPrice] = useState<number>(0); // Mulai dari 0
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
     const [showPayModal, setShowPayModal] = useState(false);
     const [paymentSourceAccountId, setPaymentSourceAccountId] = useState('');
+    
+    // --- UPDATE OTOMATIS: Sinkronisasi dengan Data App.tsx ---
+    // Begitu App.tsx dapat data (initialGoldPrice berubah), update state lokal Zakat
+    useEffect(() => {
+        if (initialGoldPrice > 0) {
+            setGoldPrice(initialGoldPrice);
+        }
+    }, [initialGoldPrice]);
 
     // --- KOMPONEN LOADING ---
     const LoadingPulse = () => (
@@ -73,7 +82,8 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
     const fetchLiveGoldPrice = async () => {
         setIsFetchingPrice(true);
         try {
-            const response = await fetch('https://api.allorigins.win/raw?url=https://data-asg.goldprice.org/dbXRates/IDR');
+            // Gunakan metode yang sama persis dengan App.tsx (lebih stabil)
+            const response = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://data-asg.goldprice.org/dbXRates/IDR"));
             const data = await response.json();
             if (data.items && data.items.length > 0) {
                 setGoldPrice(Math.round(data.items[0].xauPrice / 31.1035));
