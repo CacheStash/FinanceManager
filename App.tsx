@@ -61,6 +61,7 @@ import {
   isSameMonth,
   parseISO,
   differenceInHours,
+  differenceInMinutes, // Tambahan untuk cek per jam
   subHours,
 } from "date-fns";
 
@@ -357,21 +358,15 @@ const App = () => {
   }, [newTxType, incomeCategories, expenseCategories]);
 
   // --- MARKET DATA ENGINE (SYNC DENGAN ZAKATMAL) ---
+  // --- MARKET DATA ENGINE (SYNC DENGAN ZAKATMAL) ---
   useEffect(() => {
     if (!isDataLoaded) return;
 
     const fetchApiData = async () => {
       try {
-        // Hanya kembalikan data jika KEDUA API berhasil memberikan nilai asli
-        const resUsd = await fetch(
-          "https://api.exchangerate-api.com/v4/latest/USD",
-        );
+        const resUsd = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
         const dataUsd = await resUsd.json();
-
-        const resGold = await fetch(
-          "https://api.allorigins.win/raw?url=" +
-            encodeURIComponent("https://data-asg.goldprice.org/dbXRates/IDR"),
-        );
+        const resGold = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://data-asg.goldprice.org/dbXRates/IDR"));
         const dataGold = await resGold.json();
 
         if (dataUsd?.rates?.IDR && dataGold?.items?.[0]?.xauPrice) {
@@ -387,70 +382,81 @@ const App = () => {
     };
 
     const syncMarketData = async () => {
-      const today = new Date();
-      const todayStr = format(today, "yyyy-MM-dd");
-
+      const now = new Date();
+      
+      // 1. Ambil 2 data terakhir (Latest & Previous)
       const { data: dbData } = await supabase
         .from("market_logs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(2);
+      
       let latest = dbData?.[0];
       let prev = dbData?.[1];
       let insert = false;
 
+      // 2. CEK LOGIKA INSERT (PER JAM)
       if (!latest) {
-        // Init Data
+        // Init Data Dummy jika kosong
         const initData = {
           usd_price: 16773,
           gold_price: 2681000,
-          created_at: subDays(today, 1).toISOString(),
+          created_at: subHours(now, 1).toISOString(),
         };
         await supabase.from("market_logs").insert([initData]);
         insert = true;
         prev = initData as any;
-      } else if (
-        format(parseISO(latest.created_at), "yyyy-MM-dd") !== todayStr
-      ) {
-        insert = true;
+      } else {
+        // Cek selisih waktu: Apakah data terakhir sudah lebih dari 60 menit?
+        const diffMinutes = differenceInMinutes(now, parseISO(latest.created_at));
+        if (diffMinutes >= 60) {
+          insert = true;
+        }
       }
 
+      // 3. PROSES INSERT & NOTIFIKASI
       if (insert) {
         const newData = await fetchApiData();
-        // --- LOGIKA BARU: HANYA INSERT JIKA DATA VALID (> 0) ---
+
+        // Hanya proses jika data API valid (> 0)
         if (newData && newData.usd_price > 0 && newData.gold_price > 0) {
+          
+          // A. Insert Data Baru
           const { data: ins } = await supabase
             .from("market_logs")
-            .insert([
-              {
+            .insert([{
                 usd_price: newData.usd_price,
                 gold_price: newData.gold_price,
-                created_at: new Date().toISOString(),
-              },
-            ])
+                created_at: now.toISOString(),
+            }])
             .select()
             .single();
 
-          // Bandingkan untuk notifikasi
-          if (prev && prev.usd_price > 0) { // Pastikan prev data juga valid
+          // B. Logika Notifikasi (PER 12 JAM)
+          const lastNotifStr = localStorage.getItem('last_market_notif_time');
+          const lastNotifDate = lastNotifStr ? parseISO(lastNotifStr) : new Date(0);
+          const diffNotifHours = differenceInHours(now, lastNotifDate);
+
+          if (prev && prev.usd_price > 0 && diffNotifHours >= 12) {
             const safePrevUsd = prev.usd_price;
             const safePrevGold = prev.gold_price;
-            const usdChg =
-              ((newData.usd_price - safePrevUsd) / safePrevUsd) * 100;
-            const goldChg =
-              ((newData.gold_price - safePrevGold) / safePrevGold) * 100;
+            
+            const usdChg = ((newData.usd_price - safePrevUsd) / safePrevUsd) * 100;
+            const goldChg = ((newData.gold_price - safePrevGold) / safePrevGold) * 100;
 
             addNotification(
-              "Market Update",
+              "Market Update (12H)",
               `Gold: ${goldChg >= 0 ? "+" : ""}${goldChg.toFixed(2)}% | USD: ${usdChg >= 0 ? "+" : ""}${usdChg.toFixed(2)}%`,
               "INFO",
             );
+            localStorage.setItem('last_market_notif_time', now.toISOString());
           }
 
+          // C. Update variabel lokal
           prev = latest;
           latest = ins;
 
-          // Bersihkan baris lama
+          // D. Bersihkan Database (Hapus data tua)
           if (latest && prev) {
             await supabase
               .from("market_logs")
@@ -458,38 +464,17 @@ const App = () => {
               .not("id", "in", `(${latest.id},${prev.id})`);
           }
         }
-        // --- SELESAI LOGIKA BARU ---
-
-        const { data: ins } = await supabase
-          .from("market_logs")
-          .insert([
-            {
-              usd_price: newData.usd_price,
-              gold_price: newData.gold_price,
-              created_at: new Date().toISOString(),
-            },
-          ])
-          .select()
-          .single();
-
-        prev = latest;
-        latest = ins;
-
-        // Cleanup old rows
-        if (latest && prev)
-          await supabase
-            .from("market_logs")
-            .delete()
-            .not("id", "in", `(${latest.id},${prev.id})`);
       }
 
-      const safePrevUsd = prev?.usd_price || 16773;
-      const safePrevGold = prev?.gold_price || 2681000;
+      // 4. Update State Aplikasi (Real-time UI)
+      const safePrevUsd = prev?.usd_price || latest?.usd_price || 0;
+      const safePrevGold = prev?.gold_price || latest?.gold_price || 0;
 
       if (latest) {
-        const usdChg = ((latest.usd_price - safePrevUsd) / safePrevUsd) * 100;
-        const goldChg =
-          ((latest.gold_price - safePrevGold) / safePrevGold) * 100;
+        // Change stats dihitung dari jam ini vs jam lalu
+        const usdChg = safePrevUsd > 0 ? ((latest.usd_price - safePrevUsd) / safePrevUsd) * 100 : 0;
+        const goldChg = safePrevGold > 0 ? ((latest.gold_price - safePrevGold) / safePrevGold) * 100 : 0;
+        
         setMarketData({
           usdRate: latest.usd_price,
           goldPrice: latest.gold_price,
@@ -499,7 +484,14 @@ const App = () => {
         });
       }
     };
+
+    // Jalankan Sekali saat Load
     syncMarketData();
+
+    // Jalankan Interval per 5 Menit (Cek apakah sudah ganti jam)
+    const interval = setInterval(syncMarketData, 5 * 60 * 1000); 
+    return () => clearInterval(interval);
+
   }, [isDataLoaded]);
 
   // --- AUTH & LOCK SYSTEM (SESSION BASED) ---

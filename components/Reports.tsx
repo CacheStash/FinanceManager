@@ -11,6 +11,18 @@ interface ReportsProps {
 }
 
 const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en', marketData }) => {
+    // --- KOMPONEN LOADING ANIMATION (Sama seperti ZakatMal) ---
+    const LoadingPulse = () => (
+        <div className="flex items-center gap-2 ml-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] text-emerald-500/70 font-bold uppercase animate-pulse tracking-wider">
+                Loading Data...
+            </span>
+        </div>
+    );
   const t = (key: string) => key; // Simple hook
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#6366f1'];
   const CASHFLOW_COLORS = ['#10b981', '#f43f5e']; 
@@ -49,7 +61,16 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en', 
                   <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign className="w-12 h-12 text-blue-400" /></div>
                   <div className="relative z-10">
                       <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Kurs USD/IDR</p>
-                      <h3 className="text-xl font-bold text-white">{formatCurrency(marketData.usdRate)}</h3>
+                      <h3 className="text-xl font-bold text-white flex items-center">
+                          {marketData.usdRate > 0 ? (
+                              formatCurrency(marketData.usdRate)
+                          ) : (
+                              <>
+                                  <span className="text-gray-500">Rp 0</span>
+                                  <LoadingPulse />
+                              </>
+                          )}
+                      </h3>
                       <div className={`flex items-center text-xs mt-2 font-medium ${marketData.usdChange > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{marketData.usdChange > 0 ? <TrendingUp className="w-3 h-3 mr-1"/> : <TrendingDown className="w-3 h-3 mr-1"/>}{Math.abs(marketData.usdChange).toFixed(2)}%</div>
                   </div>
               </div>
@@ -57,7 +78,16 @@ const Reports: React.FC<ReportsProps> = ({ transactions, accounts, lang = 'en', 
                   <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="w-12 h-12 text-yellow-400" /></div>
                   <div className="relative z-10">
                       <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Emas Global/gr</p>
-                      <h3 className="text-xl font-bold text-white">{formatCurrency(marketData.goldPrice)}</h3>
+                      <h3 className="text-xl font-bold text-white flex items-center">
+                          {marketData.goldPrice > 0 ? (
+                              formatCurrency(marketData.goldPrice)
+                          ) : (
+                              <>
+                                  <span className="text-gray-500">Rp 0</span>
+                                  <LoadingPulse />
+                              </>
+                          )}
+                      </h3>
                       <div className={`flex items-center text-xs mt-2 font-medium ${marketData.goldChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{marketData.goldChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1"/> : <TrendingDown className="w-3 h-3 mr-1"/>}{Math.abs(marketData.goldChange).toFixed(2)}%</div>
                   </div>
               </div>
