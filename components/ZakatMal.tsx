@@ -7,10 +7,12 @@ interface ZakatMalProps {
     accounts: Account[];
     transactions: Transaction[];
     onAddTransaction: (tx: Transaction) => void;
+    // FIX: Ganti WARNING -> ALERT
+    onNotify: (title: string, msg: string, type: 'INFO' | 'ALERT' | 'SUCCESS') => void; 
     lang?: 'en' | 'id';
 }
 
-const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, lang = 'en' }) => {
+const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransaction, onNotify, lang = 'en' }) => {
     const [goldPrice, setGoldPrice] = useState<number>(1400000);
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [selectedOwner, setSelectedOwner] = useState<AccountOwner>('Husband');
@@ -104,6 +106,24 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
         };
     }, [goldPrice, selectedOwner, accounts, transactions]);
 
+    // UPDATE: Auto Notification Haul
+    useEffect(() => {
+        const notifKey = `zakat_notified_${new Date().getFullYear()}_${selectedOwner}`;
+        const hasNotified = sessionStorage.getItem(notifKey);
+
+        if (calculationResult.status === 'OBLIGATED' && !hasNotified) {
+            onNotify(
+                lang === 'en' ? 'Zakat Obligated!' : 'Wajib Zakat!', 
+                lang === 'en' 
+                    ? `Assets for ${selectedOwner === 'Husband' ? 'Husband' : 'Wife'} have met the Nisab/Haul.` 
+                    : `Harta ${selectedOwner === 'Husband' ? 'Suami' : 'Istri'} telah mencapai Nisab/Haul.`,
+                'ALERT'
+            );
+            sessionStorage.setItem(notifKey, 'true');
+        }
+    }, [calculationResult.status, selectedOwner, lang]);
+
+    // FUNGSI INI HILANG, PASTE KEMBALI DI SINI:
     const handlePayZakat = () => {
         if (!paymentSourceAccountId) return;
         const tx: Transaction = {
@@ -112,13 +132,13 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
             type: 'EXPENSE',
             amount: calculationResult.zakatAmount || 0,
             accountId: paymentSourceAccountId,
-            category: 'Zakat Mal', // FIX: Kategori Khusus
+            category: 'Zakat Mal', 
             notes: `Zakat Mal (${selectedOwner}) - Haul ${new Date().getFullYear()}`
         };
         onAddTransaction(tx);
         setShowPayModal(false);
     };
-
+    
     return (
         <div className="flex flex-col h-full bg-background pb-40 overflow-y-auto">
             <div className="p-6 pt-32 pb-40 bg-surface rounded-b-[3rem] shadow-xl relative overflow-hidden text-center group">

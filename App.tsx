@@ -646,6 +646,23 @@ const App = () => {
     isDataLoaded,
   ]);
 
+// FIX: Ganti 'WARNING' menjadi 'ALERT' agar sesuai tipe data
+  const addNotification = (title: string, message: string, type: 'INFO' | 'ALERT' | 'SUCCESS' = 'INFO') => {
+      const newNotif: AppNotification = { 
+          id: `n-${Date.now()}`, 
+          title, 
+          message, 
+          date: new Date().toISOString(), 
+          read: false, 
+          type: type as any // Gunakan 'as any' untuk menimpa strict check sementara jika perlu
+      }; 
+      setNotifications(p => {
+          const updated = [newNotif, ...p];
+          localStorage.setItem('appNotifications', JSON.stringify(updated));
+          return updated;
+      });
+  };
+
   // Auth & Pin Handlers
   const handleLocalLogin = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -933,17 +950,38 @@ const App = () => {
     setEditingAccount(null);
   };
 
-  const handleDeleteAccount = async (id: string) => {
-    if (confirm("Delete Account?")) {
-      if (user?.id) {
-        try {
-          await supabase.from("transactions").delete().eq("account_id", id);
-          await supabase.from("accounts").delete().eq("id", id);
-        } catch (e) {}
-      }
-      setAccounts((prev) => prev.filter((a) => a.id !== id));
-    }
+  
+  // UPDATE: Delete Account dengan History & Notif
+  const handleDeleteAccount = async (id: string) => { 
+      const acc = accounts.find(a => a.id === id);
+      if(confirm('Delete Account?')) { 
+          if(user?.id) { 
+              try { 
+                  await supabase.from('transactions').delete().eq('account_id', id); 
+                  await supabase.from('accounts').delete().eq('id', id); 
+              } catch(e){} 
+          } 
+          
+          // 1. Catat History Penghapusan (Tanpa Saldo)
+          const deleteTx: Transaction = {
+              id: `del-${Date.now()}`,
+              date: new Date().toISOString(),
+              type: 'EXPENSE',
+              amount: 0, 
+              accountId: 'deleted-account', 
+              category: 'System',
+              notes: `Account '${acc?.name}' has been deleted`
+          };
+          setTransactions(prev => [deleteTx, ...prev]);
+
+          // 2. Kirim Notifikasi (ALERT)
+          addNotification('Account Deleted', `Account ${acc?.name || 'Unknown'} has been permanently deleted.`, 'ALERT');
+
+          // 3. Hapus dari State
+          setAccounts(prev => prev.filter(a => a.id !== id)); 
+      } 
   };
+
   const handleDeleteTransaction = async (id: string) => {
     handleDeleteBatch([id]);
   };
@@ -1324,15 +1362,18 @@ const App = () => {
       case 'zakat': return <ZakatMal 
               accounts={accounts} 
               transactions={transactions} 
-              lang={lang} // UPDATE: Tambahkan ini agar bahasa berubah
-              onAddTransaction={(tx)=>{ 
+              lang={lang} // Fix 1: Bahasa
+              onNotify={addNotification} // Fix 2: Kirim fungsi notifikasi
+              onAddTransaction={async (tx)=>{ 
                   setTransactions(p=>[tx,...p]); 
-                  // ... logic update saldo ...
+                  addNotification('Zakat Paid', `Zakat payment recorded.`, 'SUCCESS'); // Notif Bayar
+                  if(user?.id) await supabase.from('transactions').insert([{ user_id: user.id, amount: tx.amount, type: tx.type, category: tx.category, note: tx.notes, date: tx.date, account_id: tx.accountId }]);
+                  
                   const acc = accounts.find(a => a.id === tx.accountId);
                   if(acc) {
                       const newBal = acc.balance - tx.amount;
                       setAccounts(p=>p.map(a=>a.id===tx.accountId?{...a, balance:newBal}:a));
-                      if(user?.id) supabase.from('accounts').update({ balance: newBal }).eq('id', tx.accountId);
+                      if(user?.id) await supabase.from('accounts').update({ balance: newBal }).eq('id', tx.accountId);
                   }
               }} 
           />;

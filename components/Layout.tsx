@@ -22,8 +22,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onAd
     { id: 'trans', label: lang === 'en' ? 'Trans.' : 'Trans.', icon: BookOpen },
     { id: 'stats', label: lang === 'en' ? 'Stats' : 'Statistik', icon: BarChart3 },
     { id: 'accounts', label: lang === 'en' ? 'Accounts' : 'Akun', icon: Wallet },
-    { id: 'non-profit', label: 'Hajj', icon: HeartHandshake },
-    { id: 'zakat', label: 'Zakat', icon: Coins }, 
+    { id: 'non-profit', label: lang === 'en' ? 'Hajj' : 'Haji', icon: HeartHandshake },
+    { id: 'zakat', label: 'Zakat Mal', icon: Coins }, 
     { id: 'more', label: lang === 'en' ? 'More' : 'Lainnya', icon: MoreHorizontal },
   ];
 
