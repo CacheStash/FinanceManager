@@ -1868,11 +1868,14 @@ const App = () => {
           onForgot={handleForgotPin}
         />
       )}
-      <NotificationBell
-        notifications={notifications}
-        onMarkAsRead={handleMarkAsRead}
-        onClearAll={handleClearNotifications}
-      />
+     {/* UPDATE POSISI BELL: Floating di Desktop (Kanan Bawah) */}
+      <div className="fixed top-4 right-4 md:top-auto md:bottom-28 md:right-8 z-[70]">
+        <NotificationBell
+          notifications={notifications}
+          onMarkAsRead={handleMarkAsRead}
+          onClearAll={handleClearNotifications}
+        />
+      </div>
       {renderContent()}
       {/* NEW ADD ACCOUNT MODAL */}
       {showAddAccountModal && (

@@ -36,7 +36,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ notifications, onMa
             {/* Mobile: bottom-36 right-4 (Tetap di atas tombol FAB)
                 Desktop (md): top-4 right-4 (Pojok Kanan Atas Layar)
             */}
-            <div className="fixed z-[60] bottom-36 right-4 md:top-4 md:right-4 md:bottom-auto">
+            <div className="fixed z-[60] bottom-36 right-4 md:top-auto md:bottom-28 md:right-8">
                 <button 
                     onClick={() => setIsOpen(!isOpen)}
                     className="relative p-3 bg-surface border border-white/10 rounded-full shadow-xl hover:bg-white/10 transition-all group"
@@ -51,7 +51,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ notifications, onMa
 
                 {/* --- DROPDOWN PANEL --- */}
                 {isOpen && (
-                    <div className="absolute bottom-16 right-0 md:top-14 md:bottom-auto w-[320px] bg-[#202025] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 origin-bottom-right md:origin-top-right">
+                    <div className="absolute bottom-16 right-0 w-[320px] bg-[#202025] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 origin-bottom-right">
                         <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#27272a]">
                             <h3 className="font-bold text-white text-sm">Notifications</h3>
                             {notifications.length > 0 && (
