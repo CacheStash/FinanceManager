@@ -409,7 +409,7 @@ const App = () => {
       } else {
         // Cek selisih waktu: Apakah data terakhir sudah lebih dari 60 menit?
         const diffMinutes = differenceInMinutes(now, parseISO(latest.created_at));
-        if (diffMinutes >= 60) {
+        if (diffMinutes >= 30) { // <-- UBAH DARI 60 JADI 30
           insert = true;
         }
       }

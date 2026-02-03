@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Transaction, AccountOwner } from '../types';
+import { supabase } from '../services/supabase'; // <-- TAMBAHKAN INI
 import { Coins, CalendarClock, HandCoins, X, UserCircle2, CheckCircle2, Info, AlertCircle, RefreshCw, Loader2, Lock, BadgeCheck, Eye, EyeOff } from 'lucide-react';
 import { subDays, parseISO, format, isAfter, addDays } from 'date-fns';
 
@@ -79,19 +80,32 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
     const formatCurrency = (val: number) => 
         new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
-    const fetchLiveGoldPrice = async () => {
-        setIsFetchingPrice(true);
-        try {
-            // Gunakan metode yang sama persis dengan App.tsx (lebih stabil)
-            const response = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://data-asg.goldprice.org/dbXRates/IDR"));
-            const data = await response.json();
-            if (data.items && data.items.length > 0) {
-                setGoldPrice(Math.round(data.items[0].xauPrice / 31.1035));
-            }
-        } catch (error) { console.error(error); } finally { setIsFetchingPrice(false); }
-    };
+    // --- 1. INITIAL LOAD & AUTO CHECK DARI DATABASE ---
+    useEffect(() => {
+        const loadPriceFromDB = async () => {
+            try {
+                const { data } = await supabase
+                    .from('market_logs')
+                    .select('gold_price')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
 
-    useEffect(() => { fetchLiveGoldPrice(); }, []);
+                if (data && data.gold_price > 0) {
+                    setGoldPrice(data.gold_price);
+                }
+            } catch (err) {
+                console.error("Gagal load DB:", err);
+            }
+        };
+        
+        loadPriceFromDB(); // Load saat pertama buka
+
+        // Pasang interval check ke Database (setiap 1 menit)
+        // Agar begitu App.tsx update data per 30 menit, halaman ini langsung ikut update
+        const interval = setInterval(loadPriceFromDB, 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     // --- CALCULATION ENGINE ---
     const calculationResult = useMemo(() => {
@@ -193,8 +207,7 @@ const ZakatMal: React.FC<ZakatMalProps> = ({ accounts, transactions, onAddTransa
                         ))}
                     </div>
                     <div>
-                        <div className="flex justify-between items-center mb-2"><label className="text-xs text-gray-400 uppercase font-bold flex items-center gap-2">{t('goldPrice')}</label><button onClick={fetchLiveGoldPrice} disabled={isFetchingPrice} className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 transition-all disabled:opacity-50">{isFetchingPrice ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}{t('liveUpdate')}</button></div>
-                        {/* UPDATE: Loading Animation State */}
+                         {/* UPDATE: Loading Animation State */}
                         <div className="relative group bg-[#18181b] border border-white/10 rounded-xl p-4 flex items-center h-[60px]">
                             <div className="bg-white/5 p-1.5 rounded-lg mr-3">
                                 <Lock className="w-4 h-4 text-gray-500" />
