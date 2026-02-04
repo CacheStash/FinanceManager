@@ -1316,12 +1316,13 @@ const App = () => {
     const hus = accounts.filter((a) => a.owner === "Husband"),
       wif = accounts.filter((a) => a.owner === "Wife");
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="space-y-6 pb-24 overflow-y-auto h-full p-1">
+        
+        {/* 1. Kartu Ringkasan Aset (Tetap Ada) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* TOTAL ASSETS CARD */}
           <div className="bg-surface p-4 rounded-xl border border-white/10 group relative overflow-hidden h-24 flex flex-col justify-center">
             <div className={`absolute inset-0 opacity-20 transition-opacity ${totalNet >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}></div>
-            {/* Background Graphic */}
-            {/* Background Graphic: Geser ke kiri (right-6) agar tidak terpotong */}
             <div className={`absolute right-6 -bottom-2 opacity-10 rotate-[-15deg] pointer-events-none transition-all duration-500 group-hover:scale-110 group-hover:-translate-x-2 ${totalNet >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                 {totalNet >= 0 ? <TrendingUp size={80} strokeWidth={2.5} /> : <TrendingDown size={80} strokeWidth={2.5} />}
             </div>
@@ -1349,7 +1350,36 @@ const App = () => {
             <p className="text-xl font-bold text-pink-400 relative">{formatCurrency(wif.reduce((s, a) => s + a.balance, 0))}</p>
           </div>
         </div>
+
+        {/* 2. Header List & Tombol MANAGE (Di Bawah Kartu Aset) */}
+        <div className="flex justify-between items-end px-1 border-b border-white/5 pb-2">
+            <h2 className="text-lg font-bold text-white">Accounts Portfolio</h2>
+            <button
+                onClick={() => setIsManageMode(!isManageMode)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors border ${isManageMode ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-white/5 text-gray-400 border-white/10 hover:text-white'}`}
+            >
+                {isManageMode ? 'Done' : 'Manage Accounts'}
+            </button>
+        </div>
+
+        {/* 3. Daftar Akun (Render List) */}
+        {renderList(accounts)}
+
+        {/* 4. Tombol ADD ACCOUNT (Paling Bawah) */}
+        <button
+            onClick={() => {
+                setNewAccName("");
+                setNewAccBalance("");
+                setShowAddAccountModal(true);
+            }}
+            className="w-full py-4 rounded-xl border-2 border-dashed border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-500 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 font-bold"
+        >
+            <Plus className="w-5 h-5" />
+            Add New Account
+        </button>
+      </div>
     );
+ 
   };
 
   const renderContent = () => {
