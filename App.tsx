@@ -2369,7 +2369,7 @@ const App = () => {
                   placeholder="Password"
                   value={regPass}
                   onChange={(e) => setRegPass(e.target.value)}
-                  className="w-full bg-white/5 p-3 rounded-xl text-white pr-10"
+                  className="w-full bg-white/5 p-3 rounded-xl text-white pr-10 [&::-ms-reveal]:hidden"
                 />
                 <button 
                   type="button"
